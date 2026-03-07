@@ -1,25 +1,33 @@
-//Compare two LDIF files and output the differences as a valid LDIF.
-//Bugs to https://github.com/nxadm/ldifdiff.
+// Compare two LDIF files and output the differences as a valid LDIF.
+// Bugs to https://github.com/nxadm/ldifdiff.
 //
-//    _       _       _       _       _       _       _       _
+//	_       _       _       _       _       _       _       _
+//
 // _-(_)-  _-(_)-  _-(_)-  _-(")-  _-(_)-  _-(_)-  _-(_)-  _-(_)-
-//*(___)  *(___)  *(___)  *%%%%%  *(___)  *(___)  *(___)  *(___)
+// *(___)  *(___)  *(___)  *%%%%%  *(___)  *(___)  *(___)  *(___)
 // // \\   // \\   // \\   // \\   // \\   // \\   // \\   // \\
 //
-//Usage:
-//ldifdiff <source> <target> [-i <attributes> ...] [-d]
-//ldifdiff -h
-//ldifdiff -v
-//Options:
-//-d, --dn
-//  Only print DNs instead of a full LDIF.
-//-i <attributes>, --ignore <attributes>
-//  Comma separated attribute list to be ignored.
-//  Multiple instances of this switch are allowed.
-//-h, --help
-//  Show this screen.
-//-v, --version
-//  Show version.
+// Usage:
+// ldifdiff <source> <target> [-i <attributes> ...] [-d]
+// ldifdiff -h
+// ldifdiff -v
+// Options:
+// -d, --dn
+//
+//	Only print DNs instead of a full LDIF.
+//
+// -i <attributes>, --ignore <attributes>
+//
+//	Comma separated attribute list to be ignored.
+//	Multiple instances of this switch are allowed.
+//
+// -h, --help
+//
+//	Show this screen.
+//
+// -v, --version
+//
+//	Show version.
 package main
 
 import (

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-//* Test data */
+// * Test data */
 const testBigFilesEnv = "LDIFDIFF_BIGFILES"
 const testBigFilesEnvValue = "1"
 const testDn = "dn: some_dn,ou=aAccounts,dc=domain,dc=ext"
@@ -56,24 +56,24 @@ type TestActionEntryData struct {
 func testGetActionEntryMap() TestActionEntryData {
 	return TestActionEntryData{
 		Add: actionEntry{Dn: testDn, Action: actionAdd,
-			SubActionAttrs:  []subActionAttrs{{subActionNone: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}},
 		Delete: actionEntry{Dn: testDn, Action: actionDelete,
-			SubActionAttrs:     []subActionAttrs{{subActionNone: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}},
 		Modify: actionEntry{Dn: testDn, Action: actionModify,
 			SubActionAttrs: []subActionAttrs{
 				{subActionModifyAdd: testAttrList},
 				{subActionModifyDelete: testAttrList},
 				{subActionModifyReplace: testAttrListModifyReplace}}},
 		ModifyOnlyAdd: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:            []subActionAttrs{{subActionModifyAdd: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionModifyAdd: testAttrList}}},
 		ModifyOnlyDelete: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:               []subActionAttrs{{subActionModifyDelete: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionModifyDelete: testAttrList}}},
 		ModifyOnlyReplace: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:                []subActionAttrs{{subActionModifyReplace: testAttrListModifyReplace}}},
+			SubActionAttrs: []subActionAttrs{{subActionModifyReplace: testAttrListModifyReplace}}},
 		ModifyNone: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:         []subActionAttrs{{subActionNone: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}},
 		ModifyReplaceAttributes: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:                      []subActionAttrs{{subActionModifyReplace: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionModifyReplace: testAttrList}}},
 	}
 }
 

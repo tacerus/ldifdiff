@@ -64,7 +64,7 @@ func TestWriteLdifError(t *testing.T) {
 	wg.Add(2)
 	go func(queue chan actionEntry) {
 		actionEntry := actionEntry{Dn: testDn, Action: 100,
-			SubActionAttrs:            []subActionAttrs{{subActionNone: testAttrList}}}
+			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}}
 		queue <- actionEntry
 		close(queue)
 		wg.Done()

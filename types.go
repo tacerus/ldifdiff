@@ -8,9 +8,9 @@ package ldifdiff
 // supplied attributes, while actionDelete will delete the Dn completely (supplied
 // attributes are ignored).
 // - action actionModify is more complex and has 3 types of subactions (subActionModifyAdd,
-// subActionModifyDelete and subActionModifyUpdate). A Dn with a actionModify action can have 
+// subActionModifyDelete and subActionModifyUpdate). A Dn with a actionModify action can have
 // multiple combinations of subActions and associated attributes. In the case of the
-// subAction ModifyUpdate, the attribute must be unique in order to to respect possible 
+// subAction ModifyUpdate, the attribute must be unique in order to to respect possible
 // schema restrictions (rfc2849).
 
 type action int
@@ -26,12 +26,12 @@ type actionEntry struct {
 type entries map[string][]string
 
 const (
-	actionAdd    action = iota
+	actionAdd action = iota
 	actionDelete
 	actionModify
 )
 const (
-	subActionModifyAdd     subAction = iota
+	subActionModifyAdd subAction = iota
 	subActionModifyDelete
 	subActionModifyReplace
 	subActionNone

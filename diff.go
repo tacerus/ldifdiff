@@ -1,5 +1,5 @@
-// Package ldifdiff is a fast library that outputs the difference 
-// between two LDIF files as a valid and importable LDIF (e.g. 
+// Package ldifdiff is a fast library that outputs the difference
+// between two LDIF files as a valid and importable LDIF (e.g.
 // by your LDAP server).
 package ldifdiff
 
@@ -12,8 +12,10 @@ import (
 
 // Used by the implementation program in the cmd directory.
 const Version = "v0.2.0"
+
 // Used by the implementation program in the cmd directory.
 const Author = "Claudio Ramirez <pub.claudio@gmail.com>"
+
 // Used by the implementation program in the cmd directory.
 const Repo = "https://github.com/tacerus/ldifdiff"
 

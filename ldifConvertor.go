@@ -3,6 +3,7 @@ package ldifdiff
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 )
@@ -62,7 +63,7 @@ func writeLdif(queue <-chan actionEntry, writer *bytes.Buffer, delWriter *bytes.
 			}
 			writer.WriteString(modifyStr + "\n")
 		default:
-			*err = errors.New("Unexpected LDIF action value: " + string(actionEntry.Action))
+			*err = errors.New(fmt.Sprintf("Unexpected LDIF action value: %d", actionEntry.Action))
 			continue
 		}
 	}

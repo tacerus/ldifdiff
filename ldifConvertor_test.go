@@ -44,7 +44,7 @@ func TestWriteLdif(t *testing.T) {
 		wg.Done()
 	}(queue)
 
-	go writeLdif(queue, &buffer, &wg, &err)
+	go writeLdif(queue, &buffer, &bytes.Buffer{}, &wg, &err)
 	wg.Wait()
 
 	if err != nil {
@@ -70,7 +70,7 @@ func TestWriteLdifError(t *testing.T) {
 		wg.Done()
 	}(queue)
 
-	go writeLdif(queue, &buffer, &wg, &err)
+	go writeLdif(queue, &buffer, &bytes.Buffer{}, &wg, &err)
 	wg.Wait()
 
 	if err == nil {

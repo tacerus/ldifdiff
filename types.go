@@ -13,17 +13,20 @@ package ldifdiff
 // subAction ModifyUpdate, the attribute must be unique in order to to respect possible
 // schema restrictions (rfc2849).
 
+// Entry represents a mapping between a LDAP attribute name and the associated values.
+type entry map[string][]string
+
+// Entries represents a mapping between a LDAP DN and associated attribute maps.
+type entries map[string]entry
+
 type action int
 type subAction int
-type subActionAttrs map[subAction][]string
+type subActionAttrs map[subAction]entry
 type actionEntry struct {
 	Dn             string
 	Action         action
 	SubActionAttrs []subActionAttrs
 }
-
-// Return map with dn as key and attribute array as value
-type entries map[string][]string
 
 const (
 	actionAdd action = iota

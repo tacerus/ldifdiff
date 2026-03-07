@@ -7,7 +7,7 @@ import (
 )
 
 func TestDiff(t *testing.T) {
-	ldif, err := Diff(testSourceStr, testTargetStr, nil)
+	ldif, err := Diff(testSourceStr, testTargetStr, nil, nil)
 	if ldif != testResultStr {
 		t.Error("Expected:\n[" + testResultStr + "]\nGot:\n[" + ldif + "]\n")
 	}
@@ -18,7 +18,7 @@ func TestDiff(t *testing.T) {
 		t.Error("Expected changes, got an empty modifyStr")
 	}
 
-	ldif, err = Diff(testSourceStr, testTargetStr, testIgnoreAttr)
+	ldif, err = Diff(testSourceStr, testTargetStr, testIgnoreAttr, nil)
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
 	}
@@ -32,8 +32,21 @@ func TestDiff(t *testing.T) {
 	}
 }
 
+func TestDiffMv(t *testing.T) {
+	ldif, err := Diff(testSourceMvStr, testTargetMvStr, nil, testStrictAttr)
+	if ldif != testResultMvStr {
+		t.Error("Expected: " + testResultMvStr + " Got: " + ldif)
+	}
+	if err != nil {
+		t.Error("Expected values, got error: ", err)
+	}
+	if ldif == "" {
+		t.Error("Expected changes, got an empty modifyStr")
+	}
+}
+
 func TestDiffFromFiles(t *testing.T) {
-	ldif, err := DiffFromFiles(testSourceLdifFile, testTargetLdifFile, nil)
+	ldif, err := DiffFromFiles(testSourceLdifFile, testTargetLdifFile, nil, nil)
 	if ldif != testResultStr {
 		t.Error("Expected:\n[" + testResultStr + "]\nGot:\n[" + ldif + "]\n")
 	}
@@ -44,7 +57,7 @@ func TestDiffFromFiles(t *testing.T) {
 		t.Error("Expected changes, got an empty modifyStr")
 	}
 
-	ldif, err = DiffFromFiles(testSourceLdifFile, testTargetLdifFile, testIgnoreAttr)
+	ldif, err = DiffFromFiles(testSourceLdifFile, testTargetLdifFile, testIgnoreAttr, nil)
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
 	}
@@ -59,7 +72,7 @@ func TestDiffFromFiles(t *testing.T) {
 }
 
 func TestListDiffDn(t *testing.T) {
-	dns, err := ListDiffDn(testSourceStr, testTargetStr, nil)
+	dns, err := ListDiffDn(testSourceStr, testTargetStr, nil, nil)
 	joinedLines := strings.Join(dns, "\n") + "\n"
 	if joinedLines != testResultDnStr {
 		t.Error("Expected:\n[" + testResultDnStr + "]\nGot:\n[" + joinedLines + "]\n")
@@ -68,7 +81,7 @@ func TestListDiffDn(t *testing.T) {
 		t.Error("Expected values, got error: ", err)
 	}
 
-	dns, err = ListDiffDn(testSourceStr, testTargetStr, testIgnoreAttrDn)
+	dns, err = ListDiffDn(testSourceStr, testTargetStr, testIgnoreAttrDn, nil)
 	joinedLines = strings.Join(dns, "\n") + "\n"
 	if joinedLines != testResultDnIgnoreAttrStr {
 		t.Error("Expected:\n[" + testResultDnIgnoreAttrStr + "]\nGot:\n[" + joinedLines + "]\n")
@@ -79,7 +92,7 @@ func TestListDiffDn(t *testing.T) {
 }
 
 func TestListDiffDnFromFiles(t *testing.T) {
-	dns, err := ListDiffDnFromFiles(testSourceLdifFile, testTargetLdifFile, nil)
+	dns, err := ListDiffDnFromFiles(testSourceLdifFile, testTargetLdifFile, nil, nil)
 	joinedLines := strings.Join(dns, "\n") + "\n"
 	if joinedLines != testResultDnStr {
 		t.Error("Expected:\n[" + testResultDnStr + "]\nGot:\n[" + joinedLines + "]\n")
@@ -93,7 +106,7 @@ func TestDiffFromFilesBig(t *testing.T) {
 	if os.Getenv(testBigFilesEnv) != testBigFilesEnvValue {
 		t.Skip("Skipping big files test")
 	}
-	ldif, err := DiffFromFiles(testSourceLdifFileBig, testTargetLdifFileBig, nil)
+	ldif, err := DiffFromFiles(testSourceLdifFileBig, testTargetLdifFileBig, nil, nil)
 	if ldif != testResultStr {
 		t.Error("Expected:\n[" + testResultStrBig + "]\nGot:\n[" + ldif + "]\n")
 	}
@@ -109,7 +122,7 @@ func TestDiffBig(t *testing.T) {
 	if os.Getenv(testBigFilesEnv) != testBigFilesEnvValue {
 		t.Skip("Skipping big files test")
 	}
-	ldif, err := Diff(testSourceStrBig, testTargetStrBig, nil)
+	ldif, err := Diff(testSourceStrBig, testTargetStrBig, nil, nil)
 	if ldif != testResultStr {
 		t.Error("Expected:\n" + testResultStrBig + "Got:\n" + ldif)
 	}
@@ -120,7 +133,7 @@ func TestDiffBig(t *testing.T) {
 		t.Error("Expected changes, got an empty modifyStr")
 	}
 
-	ldif, err = Diff(testSourceStrBig, testTargetStrBig, testIgnoreAttr)
+	ldif, err = Diff(testSourceStrBig, testTargetStrBig, testIgnoreAttr, nil)
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
 	}
@@ -135,9 +148,9 @@ func TestDiffBig(t *testing.T) {
 }
 
 func TestCompare(t *testing.T) {
-	source, _ := importLdifFile(testSourceLdifFile, nil)
-	target, _ := importLdifFile(testTargetLdifFile, nil)
-	ldif, err := compare(&source, &target, nil)
+	source, _ := importLdifFile(testSourceLdifFile, nil, nil)
+	target, _ := importLdifFile(testTargetLdifFile, nil, nil)
+	ldif, err := compare(&source, &target, nil, nil)
 	if ldif != testResultStr {
 		t.Error("Expected:\n[" + testResultStr + "]\nGot:\n[" + ldif + "]\n")
 	}

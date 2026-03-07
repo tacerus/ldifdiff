@@ -1,0 +1,26 @@
+dn: cn=multi1,ou=people,dc=example,dc=com
+mail: multi1@example.com
+fax: +35434354355
+uid: multi
+
+dn: cn=multi2,ou=people,dc=example,dc=com
+mail: multi2@example.net
+mail: multi.kulti2@example.com
+fax: +35434354355
+uid: multi
+
+dn: cn=multi3,ou=people,dc=example,dc=com
+mail: multi.kulti2@example.com
+mail: multi2@example.com
+fax: +35434354355
+uid: multi
+
+dn: cn=multi4,ou=people,dc=example,dc=com
+uid: multi
+mail: multi.kulti@example.com
+
+dn: cn=multi5,ou=people,dc=example,dc=com
+mail: multi1@example.com
+mail: multi2@example.com
+fax: +35434354355
+uid: multi

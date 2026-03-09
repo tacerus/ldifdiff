@@ -6,13 +6,16 @@ import (
 	"strings"
 )
 
-//* Test data */
+// * Test data */
 const testBigFilesEnv = "LDIFDIFF_BIGFILES"
 const testBigFilesEnvValue = "1"
 const testDn = "dn: some_dn,ou=aAccounts,dc=domain,dc=ext"
 const testSourceLdifFile = "t/source.ldif"
+const testSourceLdifMvFile = "t/source_mv.ldif"
 const testTargetLdifFile = "t/target.ldif"
+const testTargetLdifMvFile = "t/target_mv.ldif"
 const testResultLdifFile = "t/result.ldif"
+const testResultLdifMvFile = "t/result_mv.ldif"
 const testResultDnFile = "t/result_dn"
 const testResultDnIgnoreAttrFile = "t/result_dn_ignore_attr"
 const testInvalidLineContLdifFile = "t/invalid_line_continuation.ldif"
@@ -26,9 +29,13 @@ const testModifyReplaceLdifFile = "t/modifyReplace.ldif"
 const testModifyLdifFile = "t/modify.ldif"
 
 var testSourceStr = testGetLdifeStr(testSourceLdifFile, false)
+var testSourceMvStr = testGetLdifeStr(testSourceLdifMvFile, false)
 var testSourceNrEntries = testGetNrOfEntries(testSourceStr)
+var testSourceMvNrEntries = testGetNrOfEntries(testSourceMvStr)
 var testTargetStr = testGetLdifeStr(testTargetLdifFile, false)
+var testTargetMvStr = testGetLdifeStr(testTargetLdifMvFile, false)
 var testResultStr = testGetLdifeStr(testResultLdifFile, false)
+var testResultMvStr = testGetLdifeStr(testResultLdifMvFile, false)
 var testResultDnStr = testGetLdifeStr(testResultDnFile, false)
 var testResultDnIgnoreAttrStr = testGetLdifeStr(testResultDnIgnoreAttrFile, false)
 var testInvalidLineContStr = testGetLdifeStr(testInvalidLineContLdifFile, false)
@@ -42,8 +49,9 @@ var testModifyReplaceStr = testGetLdifeStr(testModifyReplaceLdifFile, false)
 var testModifyStr = testGetLdifeStr(testModifyLdifFile, false)
 var testIgnoreAttr = []string{"sambaSID", "eduPersonEntitlement"}
 var testIgnoreAttrDn = []string{"sambaSID", "eduPersonEntitlement", "mail"}
-var testAttrList = []string{"mail: auth2@domain.ext", "phone: +32364564645"}
-var testAttrListModifyReplace = []string{testAttrList[0]}
+var testStrictAttr = []string{"mail"}
+var testAttrList = entry{"mail": []string{"auth2@domain.ext"}, "phone": []string{"+32364564645"}}
+var testAttrListModifyReplace = entry{"mail": []string{"auth2@domain.ext"}}
 var testActionEntryTestData = testGetActionEntryMap()
 
 /* Helper functions and types */
@@ -56,24 +64,24 @@ type TestActionEntryData struct {
 func testGetActionEntryMap() TestActionEntryData {
 	return TestActionEntryData{
 		Add: actionEntry{Dn: testDn, Action: actionAdd,
-			SubActionAttrs:  []subActionAttrs{{subActionNone: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}},
 		Delete: actionEntry{Dn: testDn, Action: actionDelete,
-			SubActionAttrs:     []subActionAttrs{{subActionNone: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}},
 		Modify: actionEntry{Dn: testDn, Action: actionModify,
 			SubActionAttrs: []subActionAttrs{
 				{subActionModifyAdd: testAttrList},
 				{subActionModifyDelete: testAttrList},
 				{subActionModifyReplace: testAttrListModifyReplace}}},
 		ModifyOnlyAdd: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:            []subActionAttrs{{subActionModifyAdd: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionModifyAdd: testAttrList}}},
 		ModifyOnlyDelete: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:               []subActionAttrs{{subActionModifyDelete: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionModifyDelete: testAttrList}}},
 		ModifyOnlyReplace: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:                []subActionAttrs{{subActionModifyReplace: testAttrListModifyReplace}}},
+			SubActionAttrs: []subActionAttrs{{subActionModifyReplace: testAttrListModifyReplace}}},
 		ModifyNone: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:         []subActionAttrs{{subActionNone: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}},
 		ModifyReplaceAttributes: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs:                      []subActionAttrs{{subActionModifyReplace: testAttrList}}},
+			SubActionAttrs: []subActionAttrs{{subActionModifyReplace: testAttrList}}},
 	}
 }
 

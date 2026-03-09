@@ -44,7 +44,7 @@ func TestWriteLdif(t *testing.T) {
 		wg.Done()
 	}(queue)
 
-	go writeLdif(queue, &buffer, &wg, &err)
+	go writeLdif(queue, &buffer, &bytes.Buffer{}, &wg, &err)
 	wg.Wait()
 
 	if err != nil {
@@ -64,13 +64,13 @@ func TestWriteLdifError(t *testing.T) {
 	wg.Add(2)
 	go func(queue chan actionEntry) {
 		actionEntry := actionEntry{Dn: testDn, Action: 100,
-			SubActionAttrs:            []subActionAttrs{{subActionNone: testAttrList}}}
+			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}}
 		queue <- actionEntry
 		close(queue)
 		wg.Done()
 	}(queue)
 
-	go writeLdif(queue, &buffer, &wg, &err)
+	go writeLdif(queue, &buffer, &bytes.Buffer{}, &wg, &err)
 	wg.Wait()
 
 	if err == nil {

@@ -1,10 +1,11 @@
-// Package ldifdiff is a fast library that outputs the difference 
-// between two LDIF files as a valid and importable LDIF (e.g. 
+// Package ldifdiff is a fast library that outputs the difference
+// between two LDIF files as a valid and importable LDIF (e.g.
 // by your LDAP server).
 package ldifdiff
 
 import (
 	"bytes"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -12,12 +13,14 @@ import (
 
 // Used by the implementation program in the cmd directory.
 const Version = "v0.2.0"
+
 // Used by the implementation program in the cmd directory.
 const Author = "Claudio Ramirez <pub.claudio@gmail.com>"
+
 // Used by the implementation program in the cmd directory.
 const Repo = "https://github.com/tacerus/ldifdiff"
 
-type fn func(string, []string) (entries, error)
+type fn func(string, []string, []string) (entries, error)
 
 var skipDnForDelete map[string]bool
 
@@ -30,8 +33,8 @@ var skipDnForDelete map[string]bool
 // database (the one that created targetStr) in order to make it
 // equal to the "source" database (the one that created sourceStr). In case of
 // failure, an error is provided.
-func Diff(sourceStr, targetStr string, ignoreAttr []string) (string, error) {
-	return genericDiff(sourceStr, targetStr, ignoreAttr, convertLdifStr, nil)
+func Diff(sourceStr, targetStr string, ignoreAttr []string, strictAttr []string) (string, error) {
+	return genericDiff(sourceStr, targetStr, ignoreAttr, strictAttr, convertLdifStr, nil)
 }
 
 // DiffFromFiles compares two LDIF files (sourceFile and targetFile) and
@@ -41,8 +44,8 @@ func Diff(sourceStr, targetStr string, ignoreAttr []string) (string, error) {
 // database (the one that created targetFile) in order to make it equal to the
 // "source" database (the one that created sourceFile). In case of failure, an
 // error is provided.
-func DiffFromFiles(sourceFile, targetFile string, ignoreAttr []string) (string, error) {
-	return genericDiff(sourceFile, targetFile, ignoreAttr, importLdifFile, nil)
+func DiffFromFiles(sourceFile, targetFile string, ignoreAttr []string, strictAttr []string) (string, error) {
+	return genericDiff(sourceFile, targetFile, ignoreAttr, strictAttr, importLdifFile, nil)
 }
 
 // ListDiffDn compares two LDIF strings (sourceStr and targetStr) and outputs
@@ -50,9 +53,9 @@ func DiffFromFiles(sourceFile, targetFile string, ignoreAttr []string) (string, 
 // attributes can be supplied. These attributes will be ignored when comparing
 // the LDIF strings.
 // The output is a string slice. In case of failure, an error is provided.
-func ListDiffDn(sourceStr, targetStr string, ignoreAttr []string) ([]string, error) {
+func ListDiffDn(sourceStr, targetStr string, ignoreAttr []string, strictAttr []string) ([]string, error) {
 	dnList := []string{}
-	_, err := genericDiff(sourceStr, targetStr, ignoreAttr, convertLdifStr, &dnList)
+	_, err := genericDiff(sourceStr, targetStr, ignoreAttr, strictAttr, convertLdifStr, &dnList)
 	return dnList, err
 }
 
@@ -61,13 +64,37 @@ func ListDiffDn(sourceStr, targetStr string, ignoreAttr []string) ([]string, err
 // An array of attributes can be supplied. These attributes will be ignored
 // when comparing the LDIF strings.
 // The output is a string slice. In case of failure, an error is provided.
-func ListDiffDnFromFiles(sourceFile, targetFile string, ignoreAttr []string) ([]string, error) {
+func ListDiffDnFromFiles(sourceFile, targetFile string, ignoreAttr []string, strictAttr []string) ([]string, error) {
 	dnList := []string{}
-	_, err := genericDiff(sourceFile, targetFile, ignoreAttr, importLdifFile, &dnList)
+	_, err := genericDiff(sourceFile, targetFile, ignoreAttr, strictAttr, importLdifFile, &dnList)
 	return dnList, err
 }
 
 /* Package private functions */
+
+func entriesEqual(a, b entry) bool {
+	for attr, vals := range a {
+		bVals, bFound := b[attr]
+		if !bFound {
+			return false
+		}
+		if !slices.Equal(vals, bVals) {
+			return false
+		}
+	}
+
+	for attr, vals := range b {
+		aVals, aFound := a[attr]
+		if !aFound {
+			return false
+		}
+		if !slices.Equal(vals, aVals) {
+			return false
+		}
+	}
+
+	return true
+}
 
 func arraysEqual(a, b []string) bool {
 	if a == nil && b == nil {
@@ -97,7 +124,7 @@ func arraysEqual(a, b []string) bool {
 // - extra attribute on source: actionAdd
 // - extra attribute on target: delete
 
-func compare(source, target *entries, dnList *[]string) (string, error) {
+func compare(source, target *entries, dnList *[]string, strictAttr []string) (string, error) {
 	var buffer bytes.Buffer
 	var delBuffer bytes.Buffer
 	var err error
@@ -120,7 +147,7 @@ func compare(source, target *entries, dnList *[]string) (string, error) {
 	sendForDeletion(&orderedTargetLongToShort, source, target, queue, dnList)
 
 	// Dn on source and target
-	sendForModification(&orderedSourceShortToLong, source, target, queue, dnList)
+	sendForModification(&orderedSourceShortToLong, source, target, queue, dnList, strictAttr)
 
 	// Done sending work
 	close(queue)
@@ -145,20 +172,20 @@ func compare(source, target *entries, dnList *[]string) (string, error) {
 //	return false
 //}
 
-func genericDiff(sourceParam, targetParam string, ignoreAttr []string, fn fn, dnList *[]string) (string, error) {
+func genericDiff(sourceParam, targetParam string, ignoreAttr, strictAttr []string, fn fn, dnList *[]string) (string, error) {
 	// Read the files in memory as a Map with sorted attributes
 	var source, target entries
 	var sourceErr, targetErr error
 	var wg sync.WaitGroup
 	wg.Add(2)
 	go func(entries *entries, wg *sync.WaitGroup, err *error) {
-		result, e := fn(sourceParam, ignoreAttr)
+		result, e := fn(sourceParam, ignoreAttr, strictAttr)
 		*entries = result
 		*err = e
 		wg.Done()
 	}(&source, &wg, &sourceErr)
 	go func(entries *entries, wg *sync.WaitGroup, err *error) {
-		result, e := fn(targetParam, ignoreAttr)
+		result, e := fn(targetParam, ignoreAttr, strictAttr)
 		*entries = result
 		*err = e
 		wg.Done()
@@ -173,7 +200,7 @@ func genericDiff(sourceParam, targetParam string, ignoreAttr []string, fn fn, dn
 	}
 
 	// Compare the files
-	return compare(&source, &target, dnList)
+	return compare(&source, &target, dnList, strictAttr)
 }
 
 func sendForAddition(
@@ -182,16 +209,10 @@ func sendForAddition(
 	queue chan<- actionEntry,
 	dnList *[]string) {
 	for _, dn := range *orderedSourceShortToLong {
-		// Ignore equal entries
-		if arraysEqual((*source)[dn], (*target)[dn]) {
-			delete(*source, dn)
-			delete(*target, dn)
-			continue
-		}
 		// Mark entries for addition if only on source
 		if _, ok := (*target)[dn]; !ok {
 			if dnList == nil {
-				subActionAttr := make(map[subAction][]string)
+				subActionAttr := make(map[subAction]entry)
 				subActionAttr[subActionNone] = (*source)[dn]
 				actionEntry :=
 					actionEntry{
@@ -209,6 +230,13 @@ func sendForAddition(
 		// Implict else:
 		// It exists on target and it's not equal, so it's a modifyStr
 		skipDnForDelete[dn] = true
+
+		if entriesEqual((*source)[dn], (*target)[dn]) {
+			delete(*source, dn)
+			delete(*target, dn)
+			continue
+		}
+
 	}
 }
 
@@ -224,7 +252,7 @@ func sendForDeletion(
 		if _, ok := (*target)[dn]; ok { // It has not been deleted above
 			if _, ok := (*source)[dn]; !ok { // does not exists on source
 				if dnList == nil {
-					subActionAttr := make(map[subAction][]string)
+					subActionAttr := make(map[subAction]entry)
 					subActionAttr[subActionNone] = nil
 					actionEntry :=
 						actionEntry{
@@ -252,49 +280,62 @@ func sendForModification(
 	orderedSourceShortToLong *[]string, source,
 	target *entries,
 	queue chan<- actionEntry,
-	dnList *[]string) {
+	dnList *[]string,
+	strictAttr []string,
+) {
 	for _, dn := range *orderedSourceShortToLong {
 		// DN is present on source and target:
 		// sendForAdd/Remove clean up source and target
 		_, okSource := (*source)[dn]
 		_, okTarget := (*target)[dn]
+
 		if okSource && okTarget { // it hasn't been deleted
 			if dnList == nil {
 
 				// Store the attributes to be added, deleted or replaced
-				attrToModifyAdd := []string{}
-				attrToModifyDelete := []string{}
-				attrToModifyReplace := []string{}
+				attrToModifyAdd := entry{}
+				attrToModifyDelete := entry{}
+				attrToModifyReplace := entry{}
+
 				// Put the attributes in a map for easy lookup
-				sourceAttr := make(map[string]bool)
-				targetAttr := make(map[string]bool)
-				for _, attr := range (*source)[dn] {
-					sourceAttr[attr] = true
+				sourceMap := make(map[string][]string)
+				for attr, vals := range (*source)[dn] {
+					sourceMap[attr] = vals
 				}
-				for _, attr := range (*target)[dn] {
-					targetAttr[attr] = true
+				targetMap := make(map[string][]string)
+				for attr, vals := range (*target)[dn] {
+					targetMap[attr] = vals
 				}
 
-				// Compare attribute values starting from the source
-				for _, attr := range (*source)[dn] { // Keep the order of the attributes
-					// Attribute is not equal on both sides
-					if _, ok := targetAttr[attr]; !ok {
-						// Is the attribute name (not value) unique?
-						switch uniqueAttrName(attr, sourceAttr, targetAttr) {
-						case true: // This is a actionModify-Replace operation
-							attrToModifyReplace = append(attrToModifyReplace, attr)
-						case false: // This is just a actionModify actionAdd (only on source).
-							attrToModifyAdd = append(attrToModifyAdd, attr)
+				for attr, sourceVals := range (*source)[dn] {
+					targetVals, ok := targetMap[attr]
+					if ok && !slices.Equal(sourceVals, targetVals) || !ok {
+						strict := slices.Contains(strictAttr, attr)
+						lS := len(sourceVals)
+						lT := len(targetVals)
+						if (strict && (lS > 0 && lT > 0)) || (!strict && (lS == 1 && lT == 1)) {
+							attrToModifyReplace[attr] = sourceVals
+						} else {
+							for _, val := range sourceVals {
+								if !slices.Contains(targetVals, val) {
+									attrToModifyAdd[attr] = append(attrToModifyAdd[attr], val)
+								}
+							}
 						}
 					}
 				}
 
 				// Compare attribute values starting from the target.
-				for _, attr := range (*target)[dn] { // Keep the order of the attributes
+				for attr, targetVals := range (*target)[dn] {
+					sourceVals, ok := (*source)[dn][attr]
 					// Looking for unique attributes
-					if !uniqueAttrName(attr, sourceAttr, targetAttr) {
-						if _, ok := sourceAttr[attr]; !ok {
-							attrToModifyDelete = append(attrToModifyDelete, attr)
+					if !ok && !(len(sourceVals) == 1 && len(targetVals) == 1) {
+						attrToModifyDelete[attr] = targetVals
+					} else if _, ok := attrToModifyReplace[attr]; !ok {
+						for _, val := range targetVals {
+							if !slices.Contains(sourceVals, val) {
+								attrToModifyDelete[attr] = append(attrToModifyDelete[attr], val)
+							}
 						}
 					}
 				}
@@ -372,29 +413,4 @@ func sortDnByDepth(entries *entries, longToShort bool) []string {
 	}
 
 	return sorted
-}
-
-func uniqueAttrName(attr string, sourceAttr, targetAttr map[string]bool) bool {
-
-	// Get the attribute name
-	parts := strings.Split(attr, ":")
-	attrName := parts[0]
-	//var base64 bool
-	//if parts[1] == "" {
-	//	base64 = true
-	//}
-	sourceCounter := 0
-	for attr := range sourceAttr {
-		if strings.HasPrefix(attr, attrName+":") {
-			sourceCounter++
-		}
-	}
-	targetCounter := 0
-	for attr := range targetAttr {
-		if strings.HasPrefix(attr, attrName+":") {
-			targetCounter++
-		}
-	}
-
-	return sourceCounter == 1 && targetCounter == 1
 }

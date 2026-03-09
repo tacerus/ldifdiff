@@ -1,12 +1,3 @@
-dn: only_on_source,ou=aAccounts,dc=domain,dc=ext
-changetype: add
-sambaSID: An other samba id something
-
-dn: only_on_source_several_attr,ou=aAccounts,dc=domain,dc=ext
-changetype: add
-mail: auth2@domain.ext
-sambaSID: An other samba id something
-
 dn: dn_on_ou_only_on_target,ou=target,ou=aAccounts,dc=domain,dc=ext
 changetype: delete
 
@@ -18,6 +9,15 @@ changetype: delete
 
 dn: only_on_target_several_attr,ou=aAccounts,dc=domain,dc=ext
 changetype: delete
+
+dn: only_on_source,ou=aAccounts,dc=domain,dc=ext
+changetype: add
+sambaSID: An other samba id something
+
+dn: only_on_source_several_attr,ou=aAccounts,dc=domain,dc=ext
+changetype: add
+mail: auth2@domain.ext
+sambaSID: An other samba id something
 
 dn: mixed,ou=aAccounts,dc=domain,dc=ext
 changetype: modify

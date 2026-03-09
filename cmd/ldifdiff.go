@@ -1,25 +1,33 @@
-//Compare two LDIF files and output the differences as a valid LDIF.
-//Bugs to https://github.com/nxadm/ldifdiff.
+// Compare two LDIF files and output the differences as a valid LDIF.
+// Bugs to https://github.com/nxadm/ldifdiff.
 //
-//    _       _       _       _       _       _       _       _
+//	_       _       _       _       _       _       _       _
+//
 // _-(_)-  _-(_)-  _-(_)-  _-(")-  _-(_)-  _-(_)-  _-(_)-  _-(_)-
-//*(___)  *(___)  *(___)  *%%%%%  *(___)  *(___)  *(___)  *(___)
+// *(___)  *(___)  *(___)  *%%%%%  *(___)  *(___)  *(___)  *(___)
 // // \\   // \\   // \\   // \\   // \\   // \\   // \\   // \\
 //
-//Usage:
-//ldifdiff <source> <target> [-i <attributes> ...] [-d]
-//ldifdiff -h
-//ldifdiff -v
-//Options:
-//-d, --dn
-//  Only print DNs instead of a full LDIF.
-//-i <attributes>, --ignore <attributes>
-//  Comma separated attribute list to be ignored.
-//  Multiple instances of this switch are allowed.
-//-h, --help
-//  Show this screen.
-//-v, --version
-//  Show version.
+// Usage:
+// ldifdiff <source> <target> [-i <attributes> ...] [-d]
+// ldifdiff -h
+// ldifdiff -v
+// Options:
+// -d, --dn
+//
+//	Only print DNs instead of a full LDIF.
+//
+// -i <attributes>, --ignore <attributes>
+//
+//	Comma separated attribute list to be ignored.
+//	Multiple instances of this switch are allowed.
+//
+// -h, --help
+//
+//	Show this screen.
+//
+// -v, --version
+//
+//	Show version.
 package main
 
 import (
@@ -33,6 +41,7 @@ import (
 type Params struct {
 	Source, Target string
 	IgnoreAttr     []string
+	StrictAttr     []string
 	DnOnly         bool
 }
 
@@ -46,7 +55,7 @@ var usage = versionMsg + "\n" +
   // \\   // \\   // \\   // \\   // \\   // \\   // \\   // \\
 
 Usage:
-  ldifdiff <source> <target> [-i <attributes> ...] [-d]
+  ldifdiff <source> <target> [-i <attributes> ...] [-s <attributes> ...] [-d]
   ldifdiff -h
   ldifdiff -v
 Options:
@@ -54,6 +63,9 @@ Options:
     Only print DNs instead of a full LDIF.
   -i <attributes>, --ignore <attributes>
 	Comma separated attribute list to be ignored.
+	Multiple instances of this switch are allowed.
+  -s <attributes>, --strict <attributes>
+	Comma separated attribute list for which value ordering is to be respected.
 	Multiple instances of this switch are allowed.
   -h, --help
   	Show this screen.
@@ -71,10 +83,10 @@ func main() {
 	switch params.DnOnly {
 	case true:
 		var outputList []string
-		outputList, err = ldifdiff.ListDiffDnFromFiles(params.Source, params.Target, params.IgnoreAttr)
+		outputList, err = ldifdiff.ListDiffDnFromFiles(params.Source, params.Target, params.IgnoreAttr, params.StrictAttr)
 		output = strings.Join(outputList, "\n") + "\n"
 	default:
-		output, err = ldifdiff.DiffFromFiles(params.Source, params.Target, params.IgnoreAttr)
+		output, err = ldifdiff.DiffFromFiles(params.Source, params.Target, params.IgnoreAttr, params.StrictAttr)
 	}
 
 	if err != nil {
@@ -97,6 +109,9 @@ func (params *Params) parse() {
 		fallthrough
 	case args["--ignore"].([]string) != nil:
 		params.IgnoreAttr = args["--ignore"].([]string)
+		fallthrough
+	case args["--strict"].([]string) != nil:
+		params.StrictAttr = args["--strict"].([]string)
 		fallthrough
 	case args["<source>"].(string) != "":
 		params.Source = args["<source>"].(string)

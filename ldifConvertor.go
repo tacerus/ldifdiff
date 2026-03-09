@@ -3,7 +3,9 @@ package ldifdiff
 import (
 	"bytes"
 	"errors"
-	"strings"
+	"fmt"
+	"maps"
+	"slices"
 	"sync"
 )
 
@@ -18,16 +20,24 @@ func createModifyStr(actionEntry actionEntry) (string, error) {
 			if subAction == subActionNone {
 				return "", errors.New(("Invalid Subaction subActionNone for action actionModify"))
 			}
-			for idxInner, attr := range attrList {
+			idxInner := 0
+			for _, attr := range slices.Sorted(maps.Keys(attrList)) {
+				vals := attrList[attr]
 				if idxInner != 0 || idx != 0 {
 					buffer.WriteString("-\n")
 				}
-				parts := strings.Split(attr, ":")
-				buffer.WriteString(subActions[subAction] +
-					": " + parts[0] + "\n")
-				buffer.WriteString(parts[0] + ":" +
-					strings.Join(parts[1:], ":") + "\n")
 
+				idxInner++
+
+				for idxInnerV, val := range vals {
+					if (subActions[subAction] != "add" && subActions[subAction] != "replace") && idxInnerV != 0 {
+						buffer.WriteString("-\n")
+					}
+					if (subActions[subAction] != "add" && subActions[subAction] != "replace") || idxInnerV == 0 {
+						buffer.WriteString(subActions[subAction] + ": " + attr + "\n")
+					}
+					buffer.WriteString(attr + ": " + val + "\n")
+				}
 			}
 		}
 	}
@@ -45,8 +55,11 @@ func writeLdif(queue <-chan actionEntry, writer *bytes.Buffer, delWriter *bytes.
 			writer.WriteString(actionEntry.Dn + "\n") //dn
 			writer.WriteString("changetype: add\n")
 			attrList := actionEntry.SubActionAttrs[0][subActionNone]
-			for _, attr := range attrList {
-				writer.WriteString(attr + "\n")
+			for _, attr := range slices.Sorted(maps.Keys(attrList)) {
+				vals := attrList[attr]
+				for _, val := range vals {
+					writer.WriteString(attr + ": " + val + "\n")
+				}
 			}
 			writer.WriteString("\n")
 		case actionDelete:
@@ -62,7 +75,7 @@ func writeLdif(queue <-chan actionEntry, writer *bytes.Buffer, delWriter *bytes.
 			}
 			writer.WriteString(modifyStr + "\n")
 		default:
-			*err = errors.New("Unexpected LDIF action value: " + string(actionEntry.Action))
+			*err = errors.New(fmt.Sprintf("Unexpected LDIF action value: %d", actionEntry.Action))
 			continue
 		}
 	}

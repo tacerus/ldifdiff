@@ -1,0 +1,21 @@
+dn: cn=multi1,ou=people,dc=example,dc=com
+changetype: modify
+add: mail
+mail: multi1@example.com
+
+dn: cn=multi3,ou=people,dc=example,dc=com
+changetype: modify
+replace: mail
+mail: multi.kulti2@example.com
+mail: multi2@example.com
+
+dn: cn=multi4,ou=people,dc=example,dc=com
+changetype: modify
+replace: mail
+mail: multi.kulti@example.com
+
+dn: cn=multi5,ou=people,dc=example,dc=com
+changetype: modify
+add: mail
+mail: multi1@example.com
+mail: multi2@example.com

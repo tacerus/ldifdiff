@@ -2,32 +2,38 @@ package ldifdiff
 
 import (
 	"os"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
 )
 
 func TestImportLdifFile(t *testing.T) {
+	entries, err := importLdifFile(testSourceLdifFile, testIgnoreAttr, nil)
+	okLdifTests(t, entries, testIgnoreAttr, nil, err)
 
-	entries, err := importLdifFile(testSourceLdifFile, testIgnoreAttr)
-	okLdifTests(t, entries, testIgnoreAttr, err)
+	entries, err = importLdifFile(testSourceLdifMvFile, testIgnoreAttr, testStrictAttr)
+	okLdifTests(t, entries, testIgnoreAttr, testStrictAttr, err)
 
-	_, err = importLdifFile(testInvalidLineContLdifFile, testIgnoreAttr)
+	_, err = importLdifFile(testInvalidLineContLdifFile, testIgnoreAttr, nil)
 	invalidLineCont(t, err)
 
-	_, err = importLdifFile(testInvalidNoDnLdifFile, testIgnoreAttr)
+	_, err = importLdifFile(testInvalidNoDnLdifFile, testIgnoreAttr, nil)
 	invalidNoDn(t, err)
 
 }
 
 func TestConvertLdifStr(t *testing.T) {
-	entries, err := convertLdifStr(testSourceStr, testIgnoreAttr)
-	okLdifTests(t, entries, testIgnoreAttr, err)
+	entries, err := convertLdifStr(testSourceStr, testIgnoreAttr, nil)
+	okLdifTests(t, entries, testIgnoreAttr, nil, err)
 
-	_, err = convertLdifStr(testInvalidLineContStr, testIgnoreAttr)
+	entries, err = convertLdifStr(testSourceMvStr, nil, testStrictAttr)
+	okLdifTests(t, entries, testIgnoreAttr, testStrictAttr, err)
+
+	_, err = convertLdifStr(testInvalidLineContStr, testIgnoreAttr, nil)
 	invalidLineCont(t, err)
 
-	entries, err = convertLdifStr(testInvalidNoDnStr, testIgnoreAttr)
+	entries, err = convertLdifStr(testInvalidNoDnStr, testIgnoreAttr, nil)
 	invalidNoDn(t, err)
 }
 
@@ -35,50 +41,65 @@ func TestImportLdifFileBig(t *testing.T) {
 	if os.Getenv(testBigFilesEnv) != testBigFilesEnvValue {
 		t.Skip("Skipping big files test")
 	}
-	entries, err := importLdifFile(testSourceLdifFileBig, testIgnoreAttr)
-	okLdifTests(t, entries, testIgnoreAttr, err)
+	entries, err := importLdifFile(testSourceLdifFileBig, testIgnoreAttr, nil)
+	okLdifTests(t, entries, testIgnoreAttr, nil, err)
 }
 
 func TestConvertLdifStrBig(t *testing.T) {
 	if os.Getenv(testBigFilesEnv) != testBigFilesEnvValue {
 		t.Skip("Skipping big files test")
 	}
-	entries, err := convertLdifStr(testSourceStrBig, testIgnoreAttr)
-	okLdifTests(t, entries, testIgnoreAttr, err)
+	entries, err := convertLdifStr(testSourceStrBig, testIgnoreAttr, nil)
+	okLdifTests(t, entries, testIgnoreAttr, nil, err)
 }
 
 /* Helper test evaluation */
-func okLdifTests(t *testing.T, entries entries, ignoreAttr []string, err error) {
+func okLdifTests(t *testing.T, entries entries, ignoreAttr []string, strictAttr []string, err error) {
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
 	}
-	if len(entries) != testSourceNrEntries {
-		t.Error("Expected", testSourceNrEntries, "entries, got", strconv.Itoa(len(entries)))
+	n := testSourceNrEntries
+	if len(strictAttr) > 0 {
+		n = testSourceMvNrEntries
+	}
+	if len(entries) != n {
+		t.Error("Expected", n, "entries, got", strconv.Itoa(len(entries)))
 	}
 	for dn, attributes := range entries {
 		if !strings.HasPrefix(dn, "dn:") {
 			t.Error("Invalid dn:", dn)
 		}
-		for _, attr := range attributes {
+		for attr, vals := range attributes {
 			if strings.HasPrefix(attr, "#") {
 				t.Error("Invalid comment:", attr)
 			}
-			if strings.HasPrefix(attr, " ") {
-				t.Error("Line continuation not correctly appended:", attr)
-			}
-			if strings.IndexAny(attr, " :") < 1 {
-				t.Error("Invalid attribute line:", attr)
+			for _, val := range vals {
+				if strings.HasPrefix(val, " ") {
+					t.Error("Line continuation not correctly appended:", attr, val)
+				}
 			}
 		}
 	}
 	if len(ignoreAttr) > 0 {
 		for _, attributes := range entries {
-			for _, attr := range attributes {
+			for attr, _ := range attributes {
 				for _, ignoredAttr := range ignoreAttr {
 					if strings.HasPrefix(attr, ignoredAttr+":") {
 						t.Error("Attributed not ignored as requested:",
 							ignoredAttr, attr)
 					}
+				}
+			}
+		}
+	}
+	for _, attributes := range entries {
+		for attr, vals := range attributes {
+			// TODO: consider checking ordered equality for strict attrs here as well?
+			if !slices.Contains(strictAttr, attr) {
+				sortedVals := slices.Sorted(slices.Values(vals))
+				if !slices.Equal(vals, sortedVals) {
+					t.Errorf("Attribute values not sorted: %s.\nHave: %v\nWant: %v\n",
+						attr, vals, sortedVals)
 				}
 			}
 		}

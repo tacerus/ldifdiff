@@ -3,7 +3,9 @@ package ldifdiff
 import (
 	"bufio"
 	"errors"
+	"maps"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -11,12 +13,12 @@ import (
 
 /* Package only functions */
 
-func convertLdifStr(ldifStr string, ignoreAttr []string) (entries, error) {
-	return importRecords(ldifStr, "", ignoreAttr)
+func convertLdifStr(ldifStr string, ignoreAttr []string, strictAttr []string) (entries, error) {
+	return importRecords(ldifStr, "", ignoreAttr, strictAttr)
 }
 
-func importLdifFile(file string, ignoreAttr []string) (entries, error) {
-	entries, err := importRecords("", file, ignoreAttr)
+func importLdifFile(file string, ignoreAttr []string, strictAttr []string) (entries, error) {
+	entries, err := importRecords("", file, ignoreAttr, strictAttr)
 	if err != nil {
 		err = errors.New(err.Error() + " [" + file + "]")
 	}
@@ -61,10 +63,10 @@ func addLineToRecord(line *string, record *[]string, ignoreAttr []string, prevAt
 	return nil
 }
 
-func importRecords(ldifStr, file string, ignoreAttr []string) (entries, error) {
+func importRecords(ldifStr, file string, ignoreAttr []string, strictAttr []string) (entries, error) {
 	var readErr, parseErr error
 	queue := make(chan []string, 10)
-	entries := make(map[string][]string)
+	entries := make(entries)
 
 	// Read and Parse the file concurrently
 	var wg sync.WaitGroup
@@ -75,7 +77,7 @@ func importRecords(ldifStr, file string, ignoreAttr []string) (entries, error) {
 	default: // it's a file
 		go readFile(file, ignoreAttr, queue, &wg, &readErr)
 	}
-	go parse(entries, queue, &wg, &parseErr)
+	go parse(entries, strictAttr, queue, &wg, &parseErr)
 	wg.Wait()
 
 	// Return values
@@ -184,7 +186,7 @@ func readStr(ldifStr string, ignoreAttr []string, queue chan<- []string, wg *syn
 	}
 }
 
-func parse(entries entries, queue <-chan []string, wg *sync.WaitGroup, err *error) {
+func parse(entries entries, strictAttr []string, queue <-chan []string, wg *sync.WaitGroup, err *error) {
 	defer wg.Done()
 	for record := range queue {
 		dn := record[0] // Find dn, should be the first line
@@ -194,8 +196,28 @@ func parse(entries entries, queue <-chan []string, wg *sync.WaitGroup, err *erro
 		}
 
 		// Sort the entries
-		attr := record[1:]
-		sort.Strings(attr)
-		entries[dn] = attr
+		rest := record[1:]
+
+		newEntry := make(entry, len(rest))
+		entries[dn] = make(entry)
+
+		for _, line := range rest {
+			parts := strings.SplitN(line, ": ", 2)
+			attr := parts[0]
+			val := parts[1]
+			newEntry[attr] = append(newEntry[attr], val)
+		}
+
+		for attr := range maps.Keys(newEntry) {
+			if !slices.Contains(strictAttr, attr) {
+				sort.Strings(newEntry[attr])
+			}
+		}
+
+		for _, attr := range slices.Sorted(maps.Keys(newEntry)) {
+			if len(newEntry[attr]) > 0 {
+				entries[dn][attr] = newEntry[attr]
+			}
+		}
 	}
 }

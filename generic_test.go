@@ -4,12 +4,14 @@ import (
 	"io/ioutil"
 	"os"
 	"strings"
+
+	"github.com/go-ldap/ldap/v3"
 )
 
 // * Test data */
 const testBigFilesEnv = "LDIFDIFF_BIGFILES"
 const testBigFilesEnvValue = "1"
-const testDn = "dn: some_dn,ou=aAccounts,dc=domain,dc=ext"
+const testDn = "some_dn,ou=aAccounts,dc=domain,dc=ext"
 const testSourceLdifFile = "t/source.ldif"
 const testSourceLdifMvFile = "t/source_mv.ldif"
 const testTargetLdifFile = "t/target.ldif"
@@ -23,9 +25,6 @@ const testInvalidNoDnLdifFile = "t/invalid_no_dn.ldif"
 const testSourceLdifFileBig = "t/_source_big.ldif"
 const testTargetLdifFileBig = "t/_target_big.ldif"
 const testResultLdifFileBig = "t/_result_big.ldif"
-const testModifyAddLdifFile = "t/modifyAdd.ldif"
-const testModifyDeleteLdifFile = "t/modifyDelete.ldif"
-const testModifyReplaceLdifFile = "t/modifyReplace.ldif"
 const testModifyLdifFile = "t/modify.ldif"
 
 var testSourceStr = testGetLdifeStr(testSourceLdifFile, false)
@@ -43,9 +42,6 @@ var testInvalidNoDnStr = testGetLdifeStr(testInvalidNoDnLdifFile, false)
 var testSourceStrBig = testGetLdifeStr(testSourceLdifFileBig, true)
 var testTargetStrBig = testGetLdifeStr(testTargetLdifFileBig, true)
 var testResultStrBig = testGetLdifeStr(testResultLdifFileBig, true)
-var testModifyAddStr = testGetLdifeStr(testModifyAddLdifFile, false)
-var testModifyDeleteStr = testGetLdifeStr(testModifyDeleteLdifFile, false)
-var testModifyReplaceStr = testGetLdifeStr(testModifyReplaceLdifFile, false)
 var testModifyStr = testGetLdifeStr(testModifyLdifFile, false)
 var testIgnoreAttr = []string{"sambaSID", "eduPersonEntitlement"}
 var testIgnoreAttrDn = []string{"sambaSID", "eduPersonEntitlement", "mail"}
@@ -61,27 +57,43 @@ type TestActionEntryData struct {
 	ModifyNone, ModifyReplaceAttributes actionEntry
 }
 
+func addEntry(e entry, req *ldap.AddRequest) {
+	for a, v := range e {
+		req.Attribute(a, v)
+	}
+}
+
+func modEntry(add entry, del entry, rep entry, req *ldap.ModifyRequest) {
+	for a, v := range add {
+		req.Add(a, v)
+	}
+	for a, v := range del {
+		req.Delete(a, v)
+	}
+	for a, v := range rep {
+		req.Replace(a, v)
+	}
+}
+
 func testGetActionEntryMap() TestActionEntryData {
+	reqAdd := ldap.NewAddRequest(testDn, nil)
+	addEntry(testAttrList, reqAdd)
+	reqDel := ldap.NewDelRequest(testDn, nil)
+	reqMod := ldap.NewModifyRequest(testDn, nil)
+	modEntry(testAttrList, testAttrList, testAttrListModifyReplace, reqMod)
 	return TestActionEntryData{
-		Add: actionEntry{Dn: testDn, Action: actionAdd,
-			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}},
-		Delete: actionEntry{Dn: testDn, Action: actionDelete,
-			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}},
-		Modify: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs: []subActionAttrs{
-				{subActionModifyAdd: testAttrList},
-				{subActionModifyDelete: testAttrList},
-				{subActionModifyReplace: testAttrListModifyReplace}}},
-		ModifyOnlyAdd: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs: []subActionAttrs{{subActionModifyAdd: testAttrList}}},
-		ModifyOnlyDelete: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs: []subActionAttrs{{subActionModifyDelete: testAttrList}}},
-		ModifyOnlyReplace: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs: []subActionAttrs{{subActionModifyReplace: testAttrListModifyReplace}}},
-		ModifyNone: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs: []subActionAttrs{{subActionNone: testAttrList}}},
-		ModifyReplaceAttributes: actionEntry{Dn: testDn, Action: actionModify,
-			SubActionAttrs: []subActionAttrs{{subActionModifyReplace: testAttrList}}},
+		Add: actionEntry{
+			Dn:  testDn,
+			Add: []*ldap.AddRequest{reqAdd},
+		},
+		Delete: actionEntry{
+			Dn:  testDn,
+			Del: []*ldap.DelRequest{reqDel},
+		},
+		Modify: actionEntry{
+			Dn:  testDn,
+			Mod: []*ldap.ModifyRequest{reqMod},
+		},
 	}
 }
 

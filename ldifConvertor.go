@@ -2,54 +2,13 @@ package ldifdiff
 
 import (
 	"bytes"
-	"encoding/base64"
-	"errors"
-	"fmt"
-	"maps"
 	"slices"
 	"strings"
 	"sync"
+
+	"github.com/go-ldap/ldap/v3"
+	"github.com/go-ldap/ldif"
 )
-
-func createModifyStr(actionEntry actionEntry) (string, error) {
-	var buffer bytes.Buffer
-	subActions := make(map[subAction]string)
-	subActions[subActionModifyAdd] = "add"
-	subActions[subActionModifyDelete] = "delete"
-	subActions[subActionModifyReplace] = "replace"
-	for idx, subActionList := range actionEntry.SubActionAttrs {
-		for subAction, attrList := range subActionList {
-			if subAction == subActionNone {
-				return "", errors.New(("Invalid Subaction subActionNone for action actionModify"))
-			}
-			idxInner := 0
-			for _, attr := range slices.Sorted(maps.Keys(attrList)) {
-				vals := attrList[attr]
-				if idxInner != 0 || idx != 0 {
-					buffer.WriteString("-\n")
-				}
-
-				idxInner++
-
-				for idxInnerV, val := range vals {
-					if (subActions[subAction] != "add" && subActions[subAction] != "replace") && idxInnerV != 0 {
-						buffer.WriteString("-\n")
-					}
-					if (subActions[subAction] != "add" && subActions[subAction] != "replace") || idxInnerV == 0 {
-						buffer.WriteString(subActions[subAction] + ": " + attr + "\n")
-					}
-					sep := ":"
-					_, err := base64.StdEncoding.DecodeString(val)
-					if err == nil && !strings.HasPrefix(val, "+") {
-						sep = "::"
-					}
-					buffer.WriteString(attr + sep + " " + val + "\n")
-				}
-			}
-		}
-	}
-	return buffer.String(), nil
-}
 
 func writeLdif(queue <-chan actionEntry, writer *bytes.Buffer, delWriter *bytes.Buffer, wg *sync.WaitGroup, err *error) {
 	defer wg.Done()
@@ -57,33 +16,72 @@ func writeLdif(queue <-chan actionEntry, writer *bytes.Buffer, delWriter *bytes.
 		if *err != nil {
 			continue
 		}
-		switch actionEntry.Action {
-		case actionAdd:
-			writer.WriteString(actionEntry.Dn + "\n") //dn
-			writer.WriteString("changetype: add\n")
-			attrList := actionEntry.SubActionAttrs[0][subActionNone]
-			for _, attr := range slices.Sorted(maps.Keys(attrList)) {
-				vals := attrList[attr]
-				for _, val := range vals {
-					writer.WriteString(attr + ": " + val + "\n")
+
+		for i := 0; i < len(actionEntry.Add); i++ {
+			slices.SortFunc(actionEntry.Add[i].Attributes, func(a, b ldap.Attribute) int {
+				return strings.Compare(a.Type, b.Type)
+			})
+		}
+
+		for i := 0; i < len(actionEntry.Mod); i++ {
+			addChanges := []ldap.Change{}
+			delChanges := []ldap.Change{}
+			repChanges := []ldap.Change{}
+
+			for _, chg := range actionEntry.Mod[i].Changes {
+				switch chg.Operation {
+				case ldap.AddAttribute:
+					addChanges = append(addChanges, chg)
+				case ldap.DeleteAttribute:
+					delChanges = append(delChanges, chg)
+				case ldap.ReplaceAttribute:
+					repChanges = append(repChanges, chg)
 				}
 			}
-			writer.WriteString("\n")
-		case actionDelete:
-			delWriter.WriteString(actionEntry.Dn + "\n") //dn
-			delWriter.WriteString("changetype: delete\n\n")
-		case actionModify:
-			writer.WriteString(actionEntry.Dn + "\n") //dn
-			writer.WriteString("changetype: modify\n")
-			modifyStr, modifyErr := createModifyStr(actionEntry)
-			if modifyErr != nil {
-				*err = modifyErr
-				continue
-			}
-			writer.WriteString(modifyStr + "\n")
-		default:
-			*err = errors.New(fmt.Sprintf("Unexpected LDIF action value: %d", actionEntry.Action))
+
+			slices.SortFunc(addChanges, func(a, b ldap.Change) int {
+				return strings.Compare(a.Modification.Type, b.Modification.Type)
+			})
+			slices.SortFunc(delChanges, func(a, b ldap.Change) int {
+				return strings.Compare(a.Modification.Type, b.Modification.Type)
+			})
+			slices.SortFunc(repChanges, func(a, b ldap.Change) int {
+				return strings.Compare(a.Modification.Type, b.Modification.Type)
+			})
+
+			actionEntry.Mod[i].Changes = slices.Concat(addChanges, delChanges, repChanges)
+		}
+
+		lDel, ldifDelErr := ldif.ToLDIF(
+			actionEntry.Del,
+		)
+		if ldifDelErr != nil {
+			*err = ldifDelErr
 			continue
 		}
+
+		l, ldifErr := ldif.ToLDIF(
+			actionEntry.Add,
+			actionEntry.Mod,
+		)
+		if ldifErr != nil {
+			*err = ldifErr
+			continue
+		}
+
+		lDelStr, ldifDelMarshErr := ldif.Marshal(lDel)
+		if ldifDelMarshErr != nil {
+			*err = ldifDelMarshErr
+			continue
+		}
+
+		lStr, ldifMarshErr := ldif.Marshal(l)
+		if ldifMarshErr != nil {
+			*err = ldifMarshErr
+			continue
+		}
+
+		delWriter.WriteString(lDelStr)
+		writer.WriteString(lStr)
 	}
 }

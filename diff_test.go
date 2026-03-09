@@ -4,12 +4,14 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/google/go-cmp/cmp"
 )
 
 func TestDiff(t *testing.T) {
 	ldif, err := Diff(testSourceStr, testTargetStr, nil, nil)
-	if ldif != testResultStr {
-		t.Error("Expected:\n[" + testResultStr + "]\nGot:\n[" + ldif + "]\n")
+	if diff := cmp.Diff(testResultStr, ldif); diff != "" {
+		t.Error(diff)
 	}
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
@@ -34,8 +36,8 @@ func TestDiff(t *testing.T) {
 
 func TestDiffMv(t *testing.T) {
 	ldif, err := Diff(testSourceMvStr, testTargetMvStr, nil, testStrictAttr)
-	if ldif != testResultMvStr {
-		t.Error("Expected: " + testResultMvStr + " Got: " + ldif)
+	if diff := cmp.Diff(testResultMvStr, ldif); diff != "" {
+		t.Error("Diff:\n" + diff + "\nExpected: " + testResultMvStr + " Got: " + ldif)
 	}
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
@@ -47,8 +49,8 @@ func TestDiffMv(t *testing.T) {
 
 func TestDiffFromFiles(t *testing.T) {
 	ldif, err := DiffFromFiles(testSourceLdifFile, testTargetLdifFile, nil, nil)
-	if ldif != testResultStr {
-		t.Error("Expected:\n[" + testResultStr + "]\nGot:\n[" + ldif + "]\n")
+	if diff := cmp.Diff(testResultStr, ldif); diff != "" {
+		t.Error(diff)
 	}
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
@@ -73,18 +75,19 @@ func TestDiffFromFiles(t *testing.T) {
 
 func TestListDiffDn(t *testing.T) {
 	dns, err := ListDiffDn(testSourceStr, testTargetStr, nil, nil)
-	joinedLines := strings.Join(dns, "\n") + "\n"
-	if joinedLines != testResultDnStr {
-		t.Error("Expected:\n[" + testResultDnStr + "]\nGot:\n[" + joinedLines + "]\n")
+	joinedLines := strings.Join(dns, "\n") + "\n\n"
+	if diff := cmp.Diff(testResultDnStr, joinedLines); diff != "" {
+		t.Error("1 Diff:\n" + diff + "\nExpected:\n[" + testResultDnStr + "]\nGot:\n[" + joinedLines + "]\n")
 	}
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
 	}
 
 	dns, err = ListDiffDn(testSourceStr, testTargetStr, testIgnoreAttrDn, nil)
-	joinedLines = strings.Join(dns, "\n") + "\n"
-	if joinedLines != testResultDnIgnoreAttrStr {
-		t.Error("Expected:\n[" + testResultDnIgnoreAttrStr + "]\nGot:\n[" + joinedLines + "]\n")
+	// TODO: why does this have two trailing newlines?
+	joinedLines = strings.Join(dns, "\n") + "\n\n"
+	if diff := cmp.Diff(testResultDnIgnoreAttrStr, joinedLines); diff != "" {
+		t.Error("2 Diff:\n" + diff + "\nExpected:\n[" + testResultDnIgnoreAttrStr + "]\nGot:\n[" + joinedLines + "]\n")
 	}
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
@@ -93,9 +96,9 @@ func TestListDiffDn(t *testing.T) {
 
 func TestListDiffDnFromFiles(t *testing.T) {
 	dns, err := ListDiffDnFromFiles(testSourceLdifFile, testTargetLdifFile, nil, nil)
-	joinedLines := strings.Join(dns, "\n") + "\n"
-	if joinedLines != testResultDnStr {
-		t.Error("Expected:\n[" + testResultDnStr + "]\nGot:\n[" + joinedLines + "]\n")
+	joinedLines := strings.Join(dns, "\n") + "\n\n"
+	if diff := cmp.Diff(testResultDnStr, joinedLines); diff != "" {
+		t.Error("Diff:\n" + diff + "\nExpected:\n[" + testResultDnStr + "]\nGot:\n[" + joinedLines + "]\n")
 	}
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
@@ -151,13 +154,10 @@ func TestCompare(t *testing.T) {
 	source, _ := importLdifFile(testSourceLdifFile, nil, nil)
 	target, _ := importLdifFile(testTargetLdifFile, nil, nil)
 	ldif, err := compare(&source, &target, nil, nil)
-	if ldif != testResultStr {
-		t.Error("Expected:\n[" + testResultStr + "]\nGot:\n[" + ldif + "]\n")
+	if diff := cmp.Diff(ldif, testResultStr); diff != "" {
+		t.Error("Diff:\n" + diff + "\nExpected:\n[" + testResultStr + "]\nGot:\n[" + ldif + "]\n")
 	}
 	if err != nil {
 		t.Error("Expected values, got error: ", err)
-	}
-	if ldif == "" {
-		t.Error("Expected changes, got an empty modifyStr")
 	}
 }

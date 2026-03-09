@@ -2,10 +2,12 @@ package ldifdiff
 
 import (
 	"bytes"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
+	"strings"
 	"sync"
 )
 
@@ -36,7 +38,12 @@ func createModifyStr(actionEntry actionEntry) (string, error) {
 					if (subActions[subAction] != "add" && subActions[subAction] != "replace") || idxInnerV == 0 {
 						buffer.WriteString(subActions[subAction] + ": " + attr + "\n")
 					}
-					buffer.WriteString(attr + ": " + val + "\n")
+					sep := ":"
+					_, err := base64.StdEncoding.DecodeString(val)
+					if err == nil && !strings.HasPrefix(val, "+") {
+						sep = "::"
+					}
+					buffer.WriteString(attr + sep + " " + val + "\n")
 				}
 			}
 		}

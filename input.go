@@ -203,7 +203,7 @@ func parse(entries entries, strictAttr []string, queue <-chan []string, wg *sync
 
 		for _, line := range rest {
 			parts := strings.SplitN(line, ": ", 2)
-			attr := parts[0]
+			attr := strings.TrimSuffix(parts[0], ":")
 			val := parts[1]
 			newEntry[attr] = append(newEntry[attr], val)
 		}

@@ -20,3 +20,9 @@ mail: Multi.Kulti@example.com
 dn: cn=multi5,ou=people,dc=example,dc=com
 fax: +35434354355
 uid: multi
+
+dn: cn=multi6,ou=people,dc=example,dc=com
+cn: Max Mustermann
+
+dn: cn=multi7,ou=people,dc=example,dc=com
+cn:: TcOkeCBNw7xzdGVybcOkbm4=

@@ -19,3 +19,13 @@ changetype: modify
 add: mail
 mail: multi1@example.com
 mail: multi2@example.com
+
+dn: cn=multi6,ou=people,dc=example,dc=com
+changetype: modify
+replace: cn
+cn:: TcOkeCBNw7xzdGVybcOkbm4=
+
+dn: cn=multi7,ou=people,dc=example,dc=com
+changetype: modify
+replace: cn
+cn: Max Mustermann

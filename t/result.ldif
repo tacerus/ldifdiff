@@ -29,12 +29,11 @@ phone: +32364564645
 -
 delete: eduPersonEntitlement
 eduPersonEntitlement: urn:mace:domain.ext:entitlement:AnOther2
--
-delete: eduPersonEntitlement
 eduPersonEntitlement: urn:mace:domain.ext:entitlement:AnOther3
 -
 delete: fax
 fax: +532434344354
+-
 
 dn: modifyAddRemoveReplace,ou=aAccounts,dc=domain,dc=ext
 changetype: modify
@@ -52,26 +51,31 @@ fax: +35434354355
 -
 replace: sambaSID
 sambaSID: on source
+-
 
 dn: only_1_mvattr_on_source,ou=aAccounts,dc=domain,dc=ext
 changetype: modify
 replace: eduPersonEntitlement
 eduPersonEntitlement: urn:mace:domain.ext:entitlement:someEntitlement
+-
 
 dn: only_1_mvattr_on_target,ou=aAccounts,dc=domain,dc=ext
 changetype: modify
 delete: eduPersonEntitlement
 eduPersonEntitlement: urn:mace:domain.ext:entitlement:AnOthe2r
+-
 
 dn: only_attr_on_source,ou=aAccounts,dc=domain,dc=ext
 changetype: modify
 add: mail
 mail: auth2@domain.ext
+-
 
 dn: only_attr_on_target,ou=aAccounts,dc=domain,dc=ext
 changetype: modify
 delete: mail
 mail: auth2@domain.ext
+-
 
 dn: several_attr_only_on_source,ou=aAccounts,dc=domain,dc=ext
 changetype: modify
@@ -86,11 +90,11 @@ phone: +32364564645
 -
 replace: eduPersonEntitlement
 eduPersonEntitlement: urn:mace:domain.ext:entitlement:AnOther
+-
 
 dn: several_attr_only_on_target,ou=aAccounts,dc=domain,dc=ext
 changetype: modify
 delete: eduPersonEntitlement
 eduPersonEntitlement: urn:mace:domain.ext:entitlement:AnOther2
--
-delete: eduPersonEntitlement
 eduPersonEntitlement: urn:mace:domain.ext:entitlement:AnOther3
+-

@@ -66,7 +66,7 @@ func okLdifTests(t *testing.T, entries entries, ignoreAttr []string, strictAttr 
 		t.Error("Expected", n, "entries, got", strconv.Itoa(len(entries)))
 	}
 	for dn, attributes := range entries {
-		if !strings.HasPrefix(dn, "dn:") {
+		if !strings.Contains(dn, "=") {
 			t.Error("Invalid dn:", dn)
 		}
 		for attr, vals := range attributes {

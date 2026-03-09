@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strings"
 	"sync"
+
+	"github.com/go-ldap/ldap/v3"
 )
 
 // Used by the implementation program in the cmd directory.
@@ -96,34 +98,13 @@ func entriesEqual(a, b entry) bool {
 	return true
 }
 
-func arraysEqual(a, b []string) bool {
-	if a == nil && b == nil {
-		return true
-	}
-	if a == nil || b == nil {
-		return false
-	}
-	if len(a) != len(b) {
-		return false
-	}
-	for i := range a {
-		if a[i] != b[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // Ordering Logic:
-// actionAdd: entries from source sorted S -> L. Otherwise is invalid.
+// Add: entries from source sorted S -> L. Otherwise is invalid.
 // Remove: entries from target sorted L -> S. Otherwise is invalid.
-// actionModify:
-// - Keep S ->  L ordering
-// - If only 1 instance of attribute with different value on source and target:
-// update. This way we don't break the applicable LDAP schema.
-// - extra attribute on source: actionAdd
-// - extra attribute on target: delete
-
+// Modify:
+//   - Keep S ->  L ordering
+//   - If only 1 instance of attribute with different value on source and target:
+//     update. This way we don't break the applicable LDAP schema.
 func compare(source, target *entries, dnList *[]string, strictAttr []string) (string, error) {
 	var buffer bytes.Buffer
 	var delBuffer bytes.Buffer
@@ -162,15 +143,6 @@ func compare(source, target *entries, dnList *[]string, strictAttr []string) (st
 	// Return the results
 	return delBuffer.String() + buffer.String(), err
 }
-
-//func elementInArray(a string, array []string) bool {
-//	for _, b := range array {
-//		if b == a {
-//			return true
-//		}
-//	}
-//	return false
-//}
 
 func genericDiff(sourceParam, targetParam string, ignoreAttr, strictAttr []string, fn fn, dnList *[]string) (string, error) {
 	// Read the files in memory as a Map with sorted attributes
@@ -212,17 +184,18 @@ func sendForAddition(
 		// Mark entries for addition if only on source
 		if _, ok := (*target)[dn]; !ok {
 			if dnList == nil {
-				subActionAttr := make(map[subAction]entry)
-				subActionAttr[subActionNone] = (*source)[dn]
+				req := ldap.NewAddRequest(dn, nil)
+				for name, vals := range (*source)[dn] {
+					req.Attribute(name, vals)
+				}
 				actionEntry :=
 					actionEntry{
-						Dn:             dn,
-						Action:         actionAdd,
-						SubActionAttrs: []subActionAttrs{subActionAttr},
+						Dn:  dn,
+						Add: []*ldap.AddRequest{req},
 					}
 				queue <- actionEntry
 			} else {
-				// Always actionAdd (attributes not relevant)
+				// Always an Add operation (attributes not relevant)
 				*dnList = append(*dnList, dn)
 			}
 			delete(*source, dn)
@@ -252,13 +225,10 @@ func sendForDeletion(
 		if _, ok := (*target)[dn]; ok { // It has not been deleted above
 			if _, ok := (*source)[dn]; !ok { // does not exists on source
 				if dnList == nil {
-					subActionAttr := make(map[subAction]entry)
-					subActionAttr[subActionNone] = nil
 					actionEntry :=
 						actionEntry{
-							Dn:             dn,
-							Action:         actionDelete,
-							SubActionAttrs: []subActionAttrs{subActionAttr},
+							Dn:  dn,
+							Del: []*ldap.DelRequest{ldap.NewDelRequest(dn, nil)},
 						}
 					queue <- actionEntry
 				} else {
@@ -297,18 +267,8 @@ func sendForModification(
 				attrToModifyDelete := entry{}
 				attrToModifyReplace := entry{}
 
-				// Put the attributes in a map for easy lookup
-				sourceMap := make(map[string][]string)
-				for attr, vals := range (*source)[dn] {
-					sourceMap[attr] = vals
-				}
-				targetMap := make(map[string][]string)
-				for attr, vals := range (*target)[dn] {
-					targetMap[attr] = vals
-				}
-
 				for attr, sourceVals := range (*source)[dn] {
-					targetVals, ok := targetMap[attr]
+					targetVals, ok := (*target)[dn][attr]
 					if ok && !slices.Equal(sourceVals, targetVals) || !ok {
 						strict := slices.Contains(strictAttr, attr)
 						lS := len(sourceVals)
@@ -341,20 +301,27 @@ func sendForModification(
 				}
 
 				// Send it
-				actionEntry := actionEntry{Dn: dn, Action: actionModify}
-				subActionAttrArray := []subActionAttrs{}
+				req := ldap.NewModifyRequest(dn, nil)
+				actionEntry := actionEntry{
+					Dn: dn,
+				}
 				switch {
 				case len(attrToModifyAdd) > 0:
-					subActionAttrArray = append(subActionAttrArray, subActionAttrs{subActionModifyAdd: attrToModifyAdd})
+					for name, vals := range attrToModifyAdd {
+						req.Add(name, vals)
+					}
 					fallthrough
 				case len(attrToModifyDelete) > 0:
-					subActionAttrArray = append(subActionAttrArray, subActionAttrs{subActionModifyDelete: attrToModifyDelete})
+					for name, vals := range attrToModifyDelete {
+						req.Delete(name, vals)
+					}
 					fallthrough
 				case len(attrToModifyReplace) > 0:
-					subActionAttrArray = append(subActionAttrArray, subActionAttrs{subActionModifyReplace: attrToModifyReplace})
+					for name, vals := range attrToModifyReplace {
+						req.Replace(name, vals)
+					}
 				}
-
-				actionEntry.SubActionAttrs = subActionAttrArray
+				actionEntry.Mod = []*ldap.ModifyRequest{req}
 				queue <- actionEntry
 			} else {
 				// There must be something left to modify

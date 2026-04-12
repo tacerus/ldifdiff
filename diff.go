@@ -276,8 +276,13 @@ func sendForModification(
 						if (strict && (lS > 0 && lT > 0)) || (!strict && (lS == 1 && lT == 1)) {
 							attrToModifyReplace[attr] = sourceVals
 						} else {
+							targetMap := make(map[string]struct{}, len(targetVals))
+							for _, val := range targetVals {
+								targetMap[val] = struct{}{}
+							}
+
 							for _, val := range sourceVals {
-								if !slices.Contains(targetVals, val) {
+								if _, exists := targetMap[val]; !exists {
 									attrToModifyAdd[attr] = append(attrToModifyAdd[attr], val)
 								}
 							}
@@ -292,8 +297,13 @@ func sendForModification(
 					if !ok && !(len(sourceVals) == 1 && len(targetVals) == 1) {
 						attrToModifyDelete[attr] = targetVals
 					} else if _, ok := attrToModifyReplace[attr]; !ok {
+						sourceMap := make(map[string]struct{}, len(sourceVals))
+						for _, val := range sourceVals {
+							sourceMap[val] = struct{}{}
+						}
+
 						for _, val := range targetVals {
-							if !slices.Contains(sourceVals, val) {
+							if _, exists := sourceMap[val]; !exists {
 								attrToModifyDelete[attr] = append(attrToModifyDelete[attr], val)
 							}
 						}

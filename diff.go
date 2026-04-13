@@ -119,20 +119,14 @@ func convertLdifToEntries(l *ldif.LDIF, ignoreAttr []string) (res entries) {
 func entriesEqual(a, b entry) bool {
 	for attr, vals := range a {
 		bVals, bFound := b[attr]
-		if !bFound {
-			return false
-		}
-		if !slices.Equal(vals, bVals) {
+		if !bFound || !slices.Equal(vals, bVals) {
 			return false
 		}
 	}
 
 	for attr, vals := range b {
 		aVals, aFound := a[attr]
-		if !aFound {
-			return false
-		}
-		if !slices.Equal(vals, aVals) {
+		if !aFound || !slices.Equal(vals, aVals) {
 			return false
 		}
 	}

@@ -1,17 +1,17 @@
 package ldifdiff
 
 import (
-	"bytes"
 	"sync"
 	"testing"
 
+	"github.com/go-ldap/ldif"
 	"github.com/google/go-cmp/cmp"
 )
 
-func TestWriteLdif(t *testing.T) {
-	var buffer bytes.Buffer
+func TestBuildLdif(t *testing.T) {
 	var wg sync.WaitGroup
 	var err error
+	result := &ldif.LDIF{}
 	queue := make(chan actionEntry)
 	wg.Add(2)
 	go func(queue chan actionEntry) {
@@ -21,14 +21,19 @@ func TestWriteLdif(t *testing.T) {
 		wg.Done()
 	}(queue)
 
-	go writeLdif(queue, &buffer, &bytes.Buffer{}, &wg, &err)
+	go buildLdif(queue, result, &wg, &err)
 	wg.Wait()
 
 	if err != nil {
 		t.Error("Error not expected, got: ", err)
 	}
-	ldif := buffer.String()
-	if diff := cmp.Diff(ldif, testModifyStr); diff != "" {
-		t.Error("Diff:\n" + diff + "\nExpected:\n[" + testModifyStr + "]\nGot:\n[" + ldif + "]\n")
+
+	ldifStr, err := ldif.Marshal(result)
+	if err != nil {
+		t.Fatal("Error not expected, got: ", err)
+	}
+
+	if diff := cmp.Diff(ldifStr, testModifyStr); diff != "" {
+		t.Error("Diff:\n" + diff + "\nExpected:\n[" + testModifyStr + "]\nGot:\n[" + ldifStr + "]\n")
 	}
 }

@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-ldap/ldif"
 	"github.com/google/go-cmp/cmp"
 )
 
@@ -153,11 +154,18 @@ func TestDiffBig(t *testing.T) {
 func TestCompare(t *testing.T) {
 	source, _ := importLdifFile(testSourceLdifFile, nil, nil)
 	target, _ := importLdifFile(testTargetLdifFile, nil, nil)
-	ldif, err := compare(&source, &target, nil, nil)
-	if diff := cmp.Diff(ldif, testResultStr); diff != "" {
-		t.Error("Diff:\n" + diff + "\nExpected:\n[" + testResultStr + "]\nGot:\n[" + ldif + "]\n")
-	}
+
+	ldifObj, err := compareLdif(&source, &target, nil, nil)
 	if err != nil {
-		t.Error("Expected values, got error: ", err)
+		t.Fatal("Expected ldifObj, got error: ", err)
+	}
+
+	ldifStr, err := ldif.Marshal(ldifObj)
+	if err != nil {
+		t.Fatal("Expected ldifStr, got error: ", err)
+	}
+
+	if diff := cmp.Diff(ldifStr, testResultStr); diff != "" {
+		t.Error("Diff:\n" + diff + "\nExpected:\n[" + testResultStr + "]\nGot:\n[" + ldifStr + "]\n")
 	}
 }

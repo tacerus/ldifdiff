@@ -4,13 +4,13 @@
 package ldifdiff
 
 import (
-	"bytes"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/go-ldap/ldap/v3"
+	"github.com/go-ldap/ldif"
 )
 
 // Used by the implementation program in the cmd directory.
@@ -27,6 +27,14 @@ type fn func(string, []string, []string) (entries, error)
 var skipDnForDelete map[string]bool
 
 /* Public functions */
+
+// DiffLdif compares two *ldif.LDIF structs natively and outputs the differences as an *ldif.LDIF struct.
+// An array of attributes of ignore during the comparison can be provided.
+func DiffLdif(sourceLdif, targetLdif *ldif.LDIF, ignoreAttr []string, strictAttr []string) (*ldif.LDIF, error) {
+	source := convertLdifToEntries(sourceLdif, ignoreAttr)
+	target := convertLdifToEntries(targetLdif, ignoreAttr)
+	return compareLdif(&source, &target, nil, strictAttr)
+}
 
 // Diff compares two LDIF strings (sourceStr and targetStr) and outputs the
 // differences as a LDIF string. An array of attributes can be supplied. These
@@ -74,6 +82,40 @@ func ListDiffDnFromFiles(sourceFile, targetFile string, ignoreAttr []string, str
 
 /* Package private functions */
 
+func convertLdifToEntries(l *ldif.LDIF, ignoreAttr []string) (res entries) {
+	res = make(entries)
+
+	if l == nil {
+		return
+	}
+
+	ignoreAttrMap := make(map[string]struct{})
+	for _, attr := range ignoreAttr {
+		ignoreAttrMap[attr] = struct{}{}
+	}
+
+	for _, e := range l.Entries {
+		if e.Entry == nil {
+			continue
+		}
+
+		dn := e.Entry.DN
+		ent := make(entry)
+
+		for _, attr := range e.Entry.Attributes {
+			if _, ignore := ignoreAttrMap[attr.Name]; ignore {
+				continue
+			}
+
+			ent[attr.Name] = attr.Values
+		}
+
+		res[dn] = ent
+	}
+
+	return
+}
+
 func entriesEqual(a, b entry) bool {
 	for attr, vals := range a {
 		bVals, bFound := b[attr]
@@ -105,12 +147,11 @@ func entriesEqual(a, b entry) bool {
 //   - Keep S ->  L ordering
 //   - If only 1 instance of attribute with different value on source and target:
 //     update. This way we don't break the applicable LDAP schema.
-func compare(source, target *entries, dnList *[]string, strictAttr []string) (string, error) {
-	var buffer bytes.Buffer
-	var delBuffer bytes.Buffer
-	var err error
+func compareLdif(source, target *entries, dnList *[]string, strictAttr []string) (result *ldif.LDIF, err error) {
 	queue := make(chan actionEntry, 10)
 	var wg sync.WaitGroup
+
+	result = new(ldif.LDIF)
 
 	// Find the order in which operation must happen
 	orderedSourceShortToLong := sortDnByDepth(source, false)
@@ -118,7 +159,7 @@ func compare(source, target *entries, dnList *[]string, strictAttr []string) (st
 
 	// Write the file concurrently
 	wg.Add(1) // 1 writer
-	go writeLdif(queue, &buffer, &delBuffer, &wg, &err)
+	go buildLdif(queue, result, &wg, &err)
 
 	// Dn only on source + removal of identical entries
 	skipDnForDelete = make(map[string]bool) // Keep track of dn to skip at Deletion
@@ -141,7 +182,7 @@ func compare(source, target *entries, dnList *[]string, strictAttr []string) (st
 	wg.Wait()
 
 	// Return the results
-	return delBuffer.String() + buffer.String(), err
+	return result, err
 }
 
 func genericDiff(sourceParam, targetParam string, ignoreAttr, strictAttr []string, fn fn, dnList *[]string) (string, error) {
@@ -171,8 +212,12 @@ func genericDiff(sourceParam, targetParam string, ignoreAttr, strictAttr []strin
 		return "", targetErr
 	}
 
-	// Compare the files
-	return compare(&source, &target, dnList, strictAttr)
+	result, err := compareLdif(&source, &target, dnList, strictAttr)
+	if err != nil || dnList != nil {
+		return "", err
+	}
+
+	return ldif.Marshal(result)
 }
 
 func sendForAddition(

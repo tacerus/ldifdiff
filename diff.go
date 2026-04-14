@@ -299,86 +299,71 @@ func sendForModification(
 		_, okTarget := (*target)[dn]
 
 		if okSource && okTarget { // it hasn't been deleted
-			if dnList == nil {
+			attrToModifyAdd := entry{}
+			attrToModifyDelete := entry{}
+			attrToModifyReplace := entry{}
 
-				// Store the attributes to be added, deleted or replaced
-				attrToModifyAdd := entry{}
-				attrToModifyDelete := entry{}
-				attrToModifyReplace := entry{}
-
-				for attr, sourceVals := range (*source)[dn] {
-					targetVals, ok := (*target)[dn][attr]
-					if ok && !slices.Equal(sourceVals, targetVals) || !ok {
-						strict := slices.Contains(strictAttr, attr)
-						lS := len(sourceVals)
-						lT := len(targetVals)
-						if (strict && (lS > 0 && lT > 0)) || (!strict && (lS == 1 && lT == 1)) {
-							attrToModifyReplace[attr] = sourceVals
-						} else {
-							targetMap := make(map[string]struct{}, len(targetVals))
-							for _, val := range targetVals {
-								targetMap[val] = struct{}{}
-							}
-
-							for _, val := range sourceVals {
-								if _, exists := targetMap[val]; !exists {
-									attrToModifyAdd[attr] = append(attrToModifyAdd[attr], val)
-								}
-							}
-						}
-					}
-				}
-
-				// Compare attribute values starting from the target.
-				for attr, targetVals := range (*target)[dn] {
-					sourceVals, ok := (*source)[dn][attr]
-					// Looking for unique attributes
-					if !ok && !(len(sourceVals) == 1 && len(targetVals) == 1) {
-						attrToModifyDelete[attr] = targetVals
-					} else if _, ok := attrToModifyReplace[attr]; !ok {
-						sourceMap := make(map[string]struct{}, len(sourceVals))
-						for _, val := range sourceVals {
-							sourceMap[val] = struct{}{}
-						}
-
+			for attr, sourceVals := range (*source)[dn] {
+				targetVals, ok := (*target)[dn][attr]
+				if ok && !slices.Equal(sourceVals, targetVals) || !ok {
+					strict := slices.Contains(strictAttr, attr)
+					lS := len(sourceVals)
+					lT := len(targetVals)
+					if (strict && (lS > 0 && lT > 0)) || (!strict && (lS == 1 && lT == 1)) {
+						attrToModifyReplace[attr] = sourceVals
+					} else {
+						targetMap := make(map[string]struct{}, len(targetVals))
 						for _, val := range targetVals {
-							if _, exists := sourceMap[val]; !exists {
-								attrToModifyDelete[attr] = append(attrToModifyDelete[attr], val)
+							targetMap[val] = struct{}{}
+						}
+						for _, val := range sourceVals {
+							if _, exists := targetMap[val]; !exists {
+								attrToModifyAdd[attr] = append(attrToModifyAdd[attr], val)
 							}
 						}
 					}
 				}
+			}
 
-				// Send it
-				req := ldap.NewModifyRequest(dn, nil)
-				actionEntry := actionEntry{
-					Dn: dn,
+			// Compare attribute values starting from the target.
+			for attr, targetVals := range (*target)[dn] {
+				sourceVals, ok := (*source)[dn][attr] // Looking for unique attributes
+				if !ok && !(len(sourceVals) == 1 && len(targetVals) == 1) {
+					attrToModifyDelete[attr] = targetVals
+				} else if _, ok := attrToModifyReplace[attr]; !ok {
+					sourceMap := make(map[string]struct{}, len(sourceVals))
+					for _, val := range sourceVals {
+						sourceMap[val] = struct{}{}
+					}
+					for _, val := range targetVals {
+						if _, exists := sourceMap[val]; !exists {
+							attrToModifyDelete[attr] = append(attrToModifyDelete[attr], val)
+						}
+					}
 				}
-				switch {
-				case len(attrToModifyAdd) > 0:
+			}
+
+			if len(attrToModifyAdd) > 0 || len(attrToModifyDelete) > 0 || len(attrToModifyReplace) > 0 {
+				if dnList == nil {
+					req := ldap.NewModifyRequest(dn, nil)
 					for name, vals := range attrToModifyAdd {
 						req.Add(name, vals)
 					}
-					fallthrough
-				case len(attrToModifyDelete) > 0:
 					for name, vals := range attrToModifyDelete {
 						req.Delete(name, vals)
 					}
-					fallthrough
-				case len(attrToModifyReplace) > 0:
 					for name, vals := range attrToModifyReplace {
 						req.Replace(name, vals)
 					}
+					queue <- actionEntry{
+						Dn:  dn,
+						Mod: []*ldap.ModifyRequest{req},
+					}
+				} else {
+					*dnList = append(*dnList, dn)
 				}
-				actionEntry.Mod = []*ldap.ModifyRequest{req}
-				queue <- actionEntry
-			} else {
-				// There must be something left to modify
-				//if len((*source)[dn]) > 0 || len((*target)[dn]) > 0 {
-				*dnList = append(*dnList, dn)
-				//}
 			}
-			// Clean it up
+
 			delete(*source, dn)
 			delete(*target, dn)
 		}

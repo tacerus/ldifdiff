@@ -4,13 +4,13 @@
 package ldifdiff
 
 import (
-	"bytes"
 	"slices"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/go-ldap/ldap/v3"
+	"github.com/go-ldap/ldif"
 )
 
 // Used by the implementation program in the cmd directory.
@@ -27,6 +27,14 @@ type fn func(string, []string, []string) (entries, error)
 var skipDnForDelete map[string]bool
 
 /* Public functions */
+
+// DiffLdif compares two *ldif.LDIF structs natively and outputs the differences as an *ldif.LDIF struct.
+// An array of attributes of ignore during the comparison can be provided.
+func DiffLdif(sourceLdif, targetLdif *ldif.LDIF, ignoreAttr []string, strictAttr []string) (*ldif.LDIF, error) {
+	source := convertLdifToEntries(sourceLdif, ignoreAttr)
+	target := convertLdifToEntries(targetLdif, ignoreAttr)
+	return compareLdif(&source, &target, nil, strictAttr)
+}
 
 // Diff compares two LDIF strings (sourceStr and targetStr) and outputs the
 // differences as a LDIF string. An array of attributes can be supplied. These
@@ -74,23 +82,51 @@ func ListDiffDnFromFiles(sourceFile, targetFile string, ignoreAttr []string, str
 
 /* Package private functions */
 
+func convertLdifToEntries(l *ldif.LDIF, ignoreAttr []string) (res entries) {
+	res = make(entries)
+
+	if l == nil {
+		return
+	}
+
+	ignoreAttrMap := make(map[string]struct{})
+	for _, attr := range ignoreAttr {
+		ignoreAttrMap[attr] = struct{}{}
+	}
+
+	for _, e := range l.Entries {
+		if e.Entry == nil {
+			continue
+		}
+
+		dn := e.Entry.DN
+		ent := make(entry)
+
+		for _, attr := range e.Entry.Attributes {
+			if _, ignore := ignoreAttrMap[attr.Name]; ignore {
+				continue
+			}
+
+			ent[attr.Name] = attr.Values
+		}
+
+		res[dn] = ent
+	}
+
+	return
+}
+
 func entriesEqual(a, b entry) bool {
 	for attr, vals := range a {
 		bVals, bFound := b[attr]
-		if !bFound {
-			return false
-		}
-		if !slices.Equal(vals, bVals) {
+		if !bFound || !slices.Equal(vals, bVals) {
 			return false
 		}
 	}
 
 	for attr, vals := range b {
 		aVals, aFound := a[attr]
-		if !aFound {
-			return false
-		}
-		if !slices.Equal(vals, aVals) {
+		if !aFound || !slices.Equal(vals, aVals) {
 			return false
 		}
 	}
@@ -105,12 +141,11 @@ func entriesEqual(a, b entry) bool {
 //   - Keep S ->  L ordering
 //   - If only 1 instance of attribute with different value on source and target:
 //     update. This way we don't break the applicable LDAP schema.
-func compare(source, target *entries, dnList *[]string, strictAttr []string) (string, error) {
-	var buffer bytes.Buffer
-	var delBuffer bytes.Buffer
-	var err error
+func compareLdif(source, target *entries, dnList *[]string, strictAttr []string) (result *ldif.LDIF, err error) {
 	queue := make(chan actionEntry, 10)
 	var wg sync.WaitGroup
+
+	result = new(ldif.LDIF)
 
 	// Find the order in which operation must happen
 	orderedSourceShortToLong := sortDnByDepth(source, false)
@@ -118,7 +153,7 @@ func compare(source, target *entries, dnList *[]string, strictAttr []string) (st
 
 	// Write the file concurrently
 	wg.Add(1) // 1 writer
-	go writeLdif(queue, &buffer, &delBuffer, &wg, &err)
+	go buildLdif(queue, result, &wg, &err)
 
 	// Dn only on source + removal of identical entries
 	skipDnForDelete = make(map[string]bool) // Keep track of dn to skip at Deletion
@@ -141,7 +176,7 @@ func compare(source, target *entries, dnList *[]string, strictAttr []string) (st
 	wg.Wait()
 
 	// Return the results
-	return delBuffer.String() + buffer.String(), err
+	return result, err
 }
 
 func genericDiff(sourceParam, targetParam string, ignoreAttr, strictAttr []string, fn fn, dnList *[]string) (string, error) {
@@ -171,8 +206,12 @@ func genericDiff(sourceParam, targetParam string, ignoreAttr, strictAttr []strin
 		return "", targetErr
 	}
 
-	// Compare the files
-	return compare(&source, &target, dnList, strictAttr)
+	result, err := compareLdif(&source, &target, dnList, strictAttr)
+	if err != nil || dnList != nil {
+		return "", err
+	}
+
+	return ldif.Marshal(result)
 }
 
 func sendForAddition(
@@ -260,86 +299,71 @@ func sendForModification(
 		_, okTarget := (*target)[dn]
 
 		if okSource && okTarget { // it hasn't been deleted
-			if dnList == nil {
+			attrToModifyAdd := entry{}
+			attrToModifyDelete := entry{}
+			attrToModifyReplace := entry{}
 
-				// Store the attributes to be added, deleted or replaced
-				attrToModifyAdd := entry{}
-				attrToModifyDelete := entry{}
-				attrToModifyReplace := entry{}
-
-				for attr, sourceVals := range (*source)[dn] {
-					targetVals, ok := (*target)[dn][attr]
-					if ok && !slices.Equal(sourceVals, targetVals) || !ok {
-						strict := slices.Contains(strictAttr, attr)
-						lS := len(sourceVals)
-						lT := len(targetVals)
-						if (strict && (lS > 0 && lT > 0)) || (!strict && (lS == 1 && lT == 1)) {
-							attrToModifyReplace[attr] = sourceVals
-						} else {
-							targetMap := make(map[string]struct{}, len(targetVals))
-							for _, val := range targetVals {
-								targetMap[val] = struct{}{}
-							}
-
-							for _, val := range sourceVals {
-								if _, exists := targetMap[val]; !exists {
-									attrToModifyAdd[attr] = append(attrToModifyAdd[attr], val)
-								}
-							}
-						}
-					}
-				}
-
-				// Compare attribute values starting from the target.
-				for attr, targetVals := range (*target)[dn] {
-					sourceVals, ok := (*source)[dn][attr]
-					// Looking for unique attributes
-					if !ok && !(len(sourceVals) == 1 && len(targetVals) == 1) {
-						attrToModifyDelete[attr] = targetVals
-					} else if _, ok := attrToModifyReplace[attr]; !ok {
-						sourceMap := make(map[string]struct{}, len(sourceVals))
-						for _, val := range sourceVals {
-							sourceMap[val] = struct{}{}
-						}
-
+			for attr, sourceVals := range (*source)[dn] {
+				targetVals, ok := (*target)[dn][attr]
+				if ok && !slices.Equal(sourceVals, targetVals) || !ok {
+					strict := slices.Contains(strictAttr, attr)
+					lS := len(sourceVals)
+					lT := len(targetVals)
+					if (strict && (lS > 0 && lT > 0)) || (!strict && (lS == 1 && lT == 1)) {
+						attrToModifyReplace[attr] = sourceVals
+					} else {
+						targetMap := make(map[string]struct{}, len(targetVals))
 						for _, val := range targetVals {
-							if _, exists := sourceMap[val]; !exists {
-								attrToModifyDelete[attr] = append(attrToModifyDelete[attr], val)
+							targetMap[val] = struct{}{}
+						}
+						for _, val := range sourceVals {
+							if _, exists := targetMap[val]; !exists {
+								attrToModifyAdd[attr] = append(attrToModifyAdd[attr], val)
 							}
 						}
 					}
 				}
+			}
 
-				// Send it
-				req := ldap.NewModifyRequest(dn, nil)
-				actionEntry := actionEntry{
-					Dn: dn,
+			// Compare attribute values starting from the target.
+			for attr, targetVals := range (*target)[dn] {
+				sourceVals, ok := (*source)[dn][attr] // Looking for unique attributes
+				if !ok && !(len(sourceVals) == 1 && len(targetVals) == 1) {
+					attrToModifyDelete[attr] = targetVals
+				} else if _, ok := attrToModifyReplace[attr]; !ok {
+					sourceMap := make(map[string]struct{}, len(sourceVals))
+					for _, val := range sourceVals {
+						sourceMap[val] = struct{}{}
+					}
+					for _, val := range targetVals {
+						if _, exists := sourceMap[val]; !exists {
+							attrToModifyDelete[attr] = append(attrToModifyDelete[attr], val)
+						}
+					}
 				}
-				switch {
-				case len(attrToModifyAdd) > 0:
+			}
+
+			if len(attrToModifyAdd) > 0 || len(attrToModifyDelete) > 0 || len(attrToModifyReplace) > 0 {
+				if dnList == nil {
+					req := ldap.NewModifyRequest(dn, nil)
 					for name, vals := range attrToModifyAdd {
 						req.Add(name, vals)
 					}
-					fallthrough
-				case len(attrToModifyDelete) > 0:
 					for name, vals := range attrToModifyDelete {
 						req.Delete(name, vals)
 					}
-					fallthrough
-				case len(attrToModifyReplace) > 0:
 					for name, vals := range attrToModifyReplace {
 						req.Replace(name, vals)
 					}
+					queue <- actionEntry{
+						Dn:  dn,
+						Mod: []*ldap.ModifyRequest{req},
+					}
+				} else {
+					*dnList = append(*dnList, dn)
 				}
-				actionEntry.Mod = []*ldap.ModifyRequest{req}
-				queue <- actionEntry
-			} else {
-				// There must be something left to modify
-				//if len((*source)[dn]) > 0 || len((*target)[dn]) > 0 {
-				*dnList = append(*dnList, dn)
-				//}
 			}
-			// Clean it up
+
 			delete(*source, dn)
 			delete(*target, dn)
 		}

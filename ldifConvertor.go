@@ -1,7 +1,6 @@
 package ldifdiff
 
 import (
-	"bytes"
 	"slices"
 	"strings"
 	"sync"
@@ -10,8 +9,12 @@ import (
 	"github.com/go-ldap/ldif"
 )
 
-func writeLdif(queue <-chan actionEntry, writer *bytes.Buffer, delWriter *bytes.Buffer, wg *sync.WaitGroup, err *error) {
+func buildLdif(queue <-chan actionEntry, result *ldif.LDIF, wg *sync.WaitGroup, err *error) {
 	defer wg.Done()
+
+	var delEntries []*ldif.Entry
+	var addModEntries []*ldif.Entry
+
 	for actionEntry := range queue {
 		if *err != nil {
 			continue
@@ -52,36 +55,26 @@ func writeLdif(queue <-chan actionEntry, writer *bytes.Buffer, delWriter *bytes.
 			actionEntry.Mod[i].Changes = slices.Concat(addChanges, delChanges, repChanges)
 		}
 
-		lDel, ldifDelErr := ldif.ToLDIF(
-			actionEntry.Del,
-		)
-		if ldifDelErr != nil {
-			*err = ldifDelErr
-			continue
+		if len(actionEntry.Del) > 0 {
+			lDel, ldifDelErr := ldif.ToLDIF(actionEntry.Del)
+			if ldifDelErr != nil {
+				*err = ldifDelErr
+				continue
+			}
+
+			delEntries = append(delEntries, lDel.Entries...)
 		}
 
-		l, ldifErr := ldif.ToLDIF(
-			actionEntry.Add,
-			actionEntry.Mod,
-		)
-		if ldifErr != nil {
-			*err = ldifErr
-			continue
-		}
+		if len(actionEntry.Add) > 0 || len(actionEntry.Mod) > 0 {
+			l, ldifErr := ldif.ToLDIF(actionEntry.Add, actionEntry.Mod)
+			if ldifErr != nil {
+				*err = ldifErr
+				continue
+			}
 
-		lDelStr, ldifDelMarshErr := ldif.Marshal(lDel)
-		if ldifDelMarshErr != nil {
-			*err = ldifDelMarshErr
-			continue
+			addModEntries = append(addModEntries, l.Entries...)
 		}
-
-		lStr, ldifMarshErr := ldif.Marshal(l)
-		if ldifMarshErr != nil {
-			*err = ldifMarshErr
-			continue
-		}
-
-		delWriter.WriteString(lDelStr)
-		writer.WriteString(lStr)
 	}
+
+	result.Entries = append(delEntries, addModEntries...)
 }

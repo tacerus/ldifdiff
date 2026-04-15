@@ -28,6 +28,16 @@ var skipDnForDelete map[string]bool
 
 /* Public functions */
 
+// DiffLdapEntries compares two []*ldap.Entry slices natively and outputs the differences as an *ldif.LDIF struct.
+// An array of attributes of ignore during the comparison can be provided.
+func DiffLdapEntries(source, target *[]*ldap.Entry, ignoreAttr []string, strictAttr []string) (*ldif.LDIF, error) {
+	srcMap := convertLdapToEntries(source, ignoreAttr)
+	*source = nil // free memory
+	tgtMap := convertLdapToEntries(target, ignoreAttr)
+	*target = nil // free memory
+	return compareLdif(&srcMap, &tgtMap, nil, strictAttr)
+}
+
 // DiffLdif compares two *ldif.LDIF structs natively and outputs the differences as an *ldif.LDIF struct.
 // An array of attributes of ignore during the comparison can be provided.
 func DiffLdif(sourceLdif, targetLdif *ldif.LDIF, ignoreAttr []string, strictAttr []string) (*ldif.LDIF, error) {
@@ -81,6 +91,28 @@ func ListDiffDnFromFiles(sourceFile, targetFile string, ignoreAttr []string, str
 }
 
 /* Package private functions */
+
+func convertLdapToEntries(ldapEntries *[]*ldap.Entry, ignoreAttr []string) (res entries) {
+	res = make(entries, len(*ldapEntries))
+
+	for i := range len(*ldapEntries) {
+		e := (*ldapEntries)[i]
+
+		dn := e.DN
+		ent := make(entry, len(e.Attributes))
+
+		for _, attr := range e.Attributes {
+			if len(ignoreAttr) > 0 && slices.Contains(ignoreAttr, attr.Name) {
+				continue
+			}
+
+			ent[attr.Name] = attr.Values
+		}
+
+		res[dn] = ent
+	}
+	return res
+}
 
 func convertLdifToEntries(l *ldif.LDIF, ignoreAttr []string) (res entries) {
 	res = make(entries)
